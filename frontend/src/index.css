@@ -1,0 +1,47 @@
+:root {
+  /* Deep space palette */
+  --bg-void: #06080f;
+  --bg-deep: #0a0e1a;
+  --bg-panel: #0d1220;
+  --bg-panel-hover: #111830;
+  --bg-elevated: #141c32;
+
+  /* Accent: electric cyan */
+  --accent: #00e5ff;
+  --accent-dim: #0097a7;
+  --accent-glow: rgba(0, 229, 255, 0.15);
+  --accent-glow-strong: rgba(0, 229, 255, 0.3);
+
+  /* Secondary: warm amber for contrast */
+  --secondary: #ffc107;
+
+  /* Text */
+  --text-primary: #e0e6f0;
+  --text-secondary: #7a89a7;
+  --text-muted: #3d4b66;
+
+  /* Borders */
+  --border: #1a2340;
+  --border-accent: rgba(0, 229, 255, 0.2);
+
+  /* Scanline effect */
+  --scanline-opacity: 0.03;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Exo 2', system-ui, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-void);
+  color: var(--text-primary);
+}
+
+#root {
+  height: 100%;
+}

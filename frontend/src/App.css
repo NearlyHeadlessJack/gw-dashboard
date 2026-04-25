@@ -131,13 +131,16 @@
 }
 
 .nav-time {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 20px;
   height: 100%;
   border-left: 1px solid var(--border);
+}
+
+.nav-time:first-of-type {
+  margin-left: auto;
 }
 
 .time-label {

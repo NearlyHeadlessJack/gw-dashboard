@@ -1,5 +1,15 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom'
 import './App.css'
+
+function useClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
 
 const DASHBOARD_MENU = [
   { path: '/dashboard', label: '仪表盘', icon: '◈' },
@@ -57,6 +67,7 @@ function MapPage() {
 }
 
 function App() {
+  const now = useClock()
   return (
     <BrowserRouter>
       <div className="app">
@@ -89,7 +100,13 @@ function App() {
           <div className="nav-time">
             <span className="time-label">UTC</span>
             <span className="time-value">
-              {new Date().toISOString().slice(11, 19)}
+              {now.toISOString().slice(11, 19)}
+            </span>
+          </div>
+          <div className="nav-time">
+            <span className="time-label">BJT</span>
+            <span className="time-value">
+              {now.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}
             </span>
           </div>
         </header>

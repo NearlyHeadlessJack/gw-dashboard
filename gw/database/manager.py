@@ -34,6 +34,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.sql.type_api import TypeEngine
 
@@ -167,7 +168,15 @@ class DatabaseManager:
         self.db_type = self._normalize_db_type(db_type)
         self.connection = connection
         self.database_url = self._build_database_url(self.db_type, connection)
-        self.engine: Engine = create_engine(self.database_url, pool_pre_ping=True)
+        engine_kwargs: dict[str, Any] = {"pool_pre_ping": True}
+        if self.db_type == "sqlite3" and str(self.database_url).endswith("/:memory:"):
+            engine_kwargs.update(
+                {
+                    "connect_args": {"check_same_thread": False},
+                    "poolclass": StaticPool,
+                }
+            )
+        self.engine: Engine = create_engine(self.database_url, **engine_kwargs)
         if self.db_type == "sqlite3":
             self._enable_sqlite_foreign_keys()
 

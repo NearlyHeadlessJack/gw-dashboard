@@ -24,6 +24,7 @@ import {
   CircleDot,
   Clock,
   Crosshair,
+  Download,
   Factory,
   History,
   LayoutDashboard,
@@ -80,6 +81,10 @@ const LEO_TRACK_COLORS = [
 const OVERVIEW_MAP_HIGH_ORBIT_COLOR = '#ef4444'
 const OVERVIEW_MAP_DEFAULT_COLOR = '#2563eb'
 const HIGH_ORBIT_ALTITUDE_KM = 35_000
+const EXPORT_MAP_WIDTH = 1600
+const EXPORT_MAP_HEIGHT = 900
+const EXPORT_MAP_ZOOM = 2
+const EXPORT_MERCATOR_MAX_LAT = 85.05112878
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -139,6 +144,8 @@ function DashboardLayout() {
 
 function OverviewPage() {
   const now = useClock()
+  const [mapExporting, setMapExporting] = useState(false)
+  const [mapExportError, setMapExportError] = useState<string | null>(null)
   const { data, loading, error } = useApi<DashboardData>('/api/dashboard')
   const {
     data: satellites,
@@ -164,6 +171,19 @@ function OverviewPage() {
   }
   if (!data || !satellites || !launches) {
     return <EmptyState label="暂无仪表盘数据" />
+  }
+
+  const handleMapExport = async () => {
+    if (!mapPoints || mapExporting) return
+    setMapExporting(true)
+    setMapExportError(null)
+    try {
+      await exportOverviewMapImage(mapPoints, now)
+    } catch {
+      setMapExportError('地图图片导出失败')
+    } finally {
+      setMapExporting(false)
+    }
   }
 
   return (
@@ -206,11 +226,27 @@ function OverviewPage() {
               ? `${formatNumber(mapPoints.satellites.length)} 颗`
               : undefined
           }
+          action={
+            <button
+              className="icon-button panel-action-button"
+              type="button"
+              onClick={handleMapExport}
+              disabled={!mapPoints || mapExporting}
+              title="导出地图图片"
+              aria-label="导出地图图片"
+            >
+              <Download size={16} />
+            </button>
+          }
         >
           <div className="overview-map-shell">
             <OverviewPointMap payload={mapPoints} now={now} />
             {mapLoading && <div className="overview-map-state">地图同步中</div>}
             {mapError && <div className="overview-map-state error">{mapError}</div>}
+            {mapExporting && <div className="overview-map-state">图片导出中</div>}
+            {mapExportError && (
+              <div className="overview-map-state error">{mapExportError}</div>
+            )}
           </div>
         </Panel>
         <Panel
@@ -1283,6 +1319,7 @@ function Panel({
   className = '',
   dense = false,
   meta,
+  action,
 }: {
   title: string
   icon: IconComponent
@@ -1290,6 +1327,7 @@ function Panel({
   className?: string
   dense?: boolean
   meta?: string
+  action?: React.ReactNode
 }) {
   return (
     <section className={`panel ${dense ? 'dense' : ''} ${className}`}>
@@ -1298,7 +1336,12 @@ function Panel({
           <Icon size={17} />
           <h2>{title}</h2>
         </div>
-        {meta && <span>{meta}</span>}
+        {(meta || action) && (
+          <div className="panel-header-actions">
+            {meta && <span>{meta}</span>}
+            {action}
+          </div>
+        )}
       </header>
       {children}
     </section>
@@ -1441,6 +1484,191 @@ function App() {
       </div>
     </BrowserRouter>
   )
+}
+
+async function exportOverviewMapImage(
+  payload: MapPointsPayload,
+  now: Date,
+): Promise<void> {
+  const canvas = document.createElement('canvas')
+  canvas.width = EXPORT_MAP_WIDTH
+  canvas.height = EXPORT_MAP_HEIGHT
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Canvas is not available')
+  }
+
+  await drawExportWorldMap(context, canvas.width, canvas.height)
+
+  const points = payload.satellites
+    .map((satellite) => ({
+      satellite,
+      position: propagateTlePosition(satellite.raw_tle, now),
+    }))
+    .filter(
+      (
+        item,
+      ): item is {
+        satellite: MapSatellitePoint
+        position: GeoPoint
+      } => item.position !== null,
+    )
+
+  drawExportSatellitePoints(context, points, canvas.width, canvas.height)
+  drawExportMapCaption(context, points.length, now)
+
+  const blob = await canvasToPngBlob(canvas)
+  const filename = `gw-satellite-map-${now
+    .toISOString()
+    .replaceAll(':', '')
+    .replaceAll('.', '-')}.png`
+  downloadBlob(blob, filename)
+}
+
+async function drawExportWorldMap(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): Promise<void> {
+  context.fillStyle = '#dbe8f4'
+  context.fillRect(0, 0, width, height)
+
+  const tileCount = 2 ** EXPORT_MAP_ZOOM
+  const tileResults = await Promise.allSettled(
+    Array.from({ length: tileCount * tileCount }, (_, index) => {
+      const x = index % tileCount
+      const y = Math.floor(index / tileCount)
+      return loadExportTileImage(x, y, EXPORT_MAP_ZOOM)
+    }),
+  )
+
+  let loadedTileCount = 0
+  tileResults.forEach((result) => {
+    if (result.status !== 'fulfilled') return
+
+    loadedTileCount += 1
+    const tileWidth = width / tileCount
+    const tileHeight = height / tileCount
+    context.drawImage(
+      result.value.image,
+      result.value.x * tileWidth,
+      result.value.y * tileHeight,
+      tileWidth,
+      tileHeight,
+    )
+  })
+
+  if (loadedTileCount === 0) {
+    throw new Error('Map tiles failed to load')
+  }
+}
+
+function loadExportTileImage(
+  x: number,
+  y: number,
+  z: number,
+): Promise<{ image: HTMLImageElement; x: number; y: number }> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.onload = () => resolve({ image, x, y })
+    image.onerror = () => reject(new Error('Map tile failed to load'))
+    image.src = gaodeTileUrl(x, y, z)
+  })
+}
+
+function gaodeTileUrl(x: number, y: number, z: number): string {
+  const subdomain = String(((x + y) % 4) + 1)
+  return GAODE_STANDARD_TILE_URL.replace('{s}', subdomain)
+    .replace('{x}', String(x))
+    .replace('{y}', String(y))
+    .replace('{z}', String(z))
+}
+
+function drawExportSatellitePoints(
+  context: CanvasRenderingContext2D,
+  points: Array<{ satellite: MapSatellitePoint; position: GeoPoint }>,
+  width: number,
+  height: number,
+) {
+  points.forEach(({ satellite, position }) => {
+    const projected = projectGeoPointForExport(position, width, height)
+    const highOrbit = isHighOrbitSatellite(satellite)
+    context.beginPath()
+    context.arc(projected.x, projected.y, highOrbit ? 5 : 4, 0, Math.PI * 2)
+    context.fillStyle = highOrbit
+      ? OVERVIEW_MAP_HIGH_ORBIT_COLOR
+      : OVERVIEW_MAP_DEFAULT_COLOR
+    context.fill()
+    context.lineWidth = 1.6
+    context.strokeStyle = '#ffffff'
+    context.stroke()
+  })
+}
+
+function drawExportMapCaption(
+  context: CanvasRenderingContext2D,
+  satelliteCount: number,
+  now: Date,
+) {
+  const iso = now.toISOString()
+  const timestamp = `${iso.slice(0, 10)} ${iso.slice(11, 19)}Z`
+  context.save()
+  context.fillStyle = 'rgba(255, 255, 255, 0.9)'
+  context.fillRect(24, 24, 350, 64)
+  context.fillStyle = '#172033'
+  context.font = '700 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+  context.fillText('星网卫星位置图', 42, 52)
+  context.font = '500 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+  context.fillText(`${formatNumber(satelliteCount)} 颗 · ${timestamp}`, 42, 76)
+  context.restore()
+}
+
+function projectGeoPointForExport(
+  point: GeoPoint,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  const latitude = Math.max(
+    -EXPORT_MERCATOR_MAX_LAT,
+    Math.min(EXPORT_MERCATOR_MAX_LAT, point.latitude),
+  )
+  const longitude = normalizeLongitude(point.longitude)
+  const sinLatitude = Math.sin((latitude * Math.PI) / 180)
+  return {
+    x: ((longitude + 180) / 360) * width,
+    y:
+      (0.5 -
+        Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) *
+      height,
+  }
+}
+
+function normalizeLongitude(value: number): number {
+  return ((((value + 180) % 360) + 360) % 360) - 180
+}
+
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+      } else {
+        reject(new Error('Canvas export failed'))
+      }
+    }, 'image/png')
+  })
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 function pointToLatLng(point: GeoPoint): L.LatLngTuple {

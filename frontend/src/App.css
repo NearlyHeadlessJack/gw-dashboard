@@ -466,6 +466,13 @@
   gap: 8px;
 }
 
+.panel-header .panel-header-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panel-header svg {
   flex-shrink: 0;
   color: var(--accent);
@@ -484,6 +491,11 @@
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.panel-action-button {
+  width: 30px;
+  height: 30px;
 }
 
 .table-wrap {
@@ -1049,6 +1061,16 @@ tbody tr:hover td {
 .icon-button:hover {
   color: var(--accent);
   border-color: rgba(52, 211, 235, 0.35);
+}
+
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.icon-button:disabled:hover {
+  color: var(--text-secondary);
+  border-color: var(--border);
 }
 
 .map-state {

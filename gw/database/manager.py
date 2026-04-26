@@ -168,6 +168,8 @@ class DatabaseManager:
         self.db_type = self._normalize_db_type(db_type)
         self.connection = connection
         self.database_url = self._build_database_url(self.db_type, connection)
+        if self.db_type == "sqlite3":
+            self._ensure_sqlite_parent_dir(self.database_url)
         engine_kwargs: dict[str, Any] = {"pool_pre_ping": True}
         if self.db_type == "sqlite3" and str(self.database_url).endswith("/:memory:"):
             engine_kwargs.update(
@@ -853,6 +855,18 @@ class DatabaseManager:
             "sqlite+pysqlite",
             database=str(Path(database_path).expanduser()),
         )
+
+    @staticmethod
+    def _ensure_sqlite_parent_dir(database_url: URL | str) -> None:
+        if isinstance(database_url, URL):
+            database = database_url.database
+        else:
+            database = None
+
+        if not database or database == ":memory:":
+            return
+
+        Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def _build_server_url(cls, db_type: str, connection: Mapping[str, Any]) -> URL:

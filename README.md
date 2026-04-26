@@ -11,11 +11,10 @@ cd frontend
 npm install
 npm run build
 cd ..
-mkdir -p database
-uv run python -m gw.web -c config.example.yaml
+uv run python -m gw.web
 ```
 
-打开 `http://127.0.0.1:8000` 即可访问前端页面，关闭后端进程后前端也会停止服务。地图页使用公共高德标准瓦片，不需要配置地图 Key。
+默认不需要任何配置文件；后端会使用 SQLite，并自动创建 `~/.gwtracking/database.db`。启动后控制台会打印前端入口 URL，可直接打开 `http://127.0.0.1:8000` 访问页面，关闭后端进程后前端也会停止服务。地图页使用公共高德标准瓦片，不需要配置地图 Key。
 
 后端启动后，控制台会持续输出运行状态，包括：
 

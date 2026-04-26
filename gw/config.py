@@ -15,10 +15,12 @@ import yaml
 
 
 ConfigMapping = dict[str, Any]
+DEFAULT_DATABASE_TYPE = "sqlite3"
+DEFAULT_DATABASE_PATH = "~/.gwtracking/database.db"
 
 REQUIRED_CONFIG_ITEMS = [
-    "database.type: 必填，sqlite3/mysql/pgsql",
-    "database.connection: 必填，sqlite3 文件路径，或 mysql/pgsql SQLAlchemy URL/dict",
+    "database.type: 默认 sqlite3，可选 sqlite3/mysql/pgsql",
+    "database.connection: 默认 ~/.gwtracking/database.db；sqlite3 文件路径，或 mysql/pgsql SQLAlchemy URL/dict",
     "backend.host: 后端 web 服务监听地址，默认 127.0.0.1",
     "backend.port: 后端 web 服务监听端口，默认 8000",
     "backend.reload: 后端开发热重载开关，默认 false",
@@ -39,20 +41,30 @@ class ConfigError(ValueError):
     """启动配置无效。"""
 
 
+def default_database_path() -> str:
+    """返回默认 SQLite 数据库路径。"""
+    return str(Path(DEFAULT_DATABASE_PATH).expanduser())
+
+
 @dataclass(frozen=True)
 class DatabaseConfig:
-    type: str
-    connection: str | dict[str, Any]
+    type: str = DEFAULT_DATABASE_TYPE
+    connection: str | dict[str, Any] = field(default_factory=default_database_path)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "DatabaseConfig":
-        db_type = str(data.get("type") or data.get("db_type") or "").strip()
+        db_type = str(
+            data.get("type") or data.get("db_type") or DEFAULT_DATABASE_TYPE
+        ).strip()
         if not db_type:
             raise ConfigError("缺少必填配置 database.type")
 
         connection = _database_connection_from_mapping(data)
         if connection is None:
-            raise ConfigError("缺少必填配置 database.connection")
+            if db_type.strip().lower() in {"sqlite", "sqlite3"}:
+                connection = default_database_path()
+            else:
+                raise ConfigError("缺少必填配置 database.connection")
 
         return cls(type=db_type, connection=connection)
 

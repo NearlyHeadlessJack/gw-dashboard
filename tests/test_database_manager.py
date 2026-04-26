@@ -53,6 +53,15 @@ def test_sqlite_file_connection_uses_database_path(tmp_path):
     assert db_path.exists()
 
 
+def test_sqlite_file_connection_creates_parent_directory(tmp_path):
+    db_path = tmp_path / "nested" / "database" / "gw.sqlite3"
+
+    db = DatabaseManager("sqlite3", db_path)
+
+    assert db.test_connection() is True
+    assert db_path.exists()
+
+
 def test_mysql_mapping_builds_engine_and_tests_connection(monkeypatch):
     created = {}
     fake_engine = FakeEngine()

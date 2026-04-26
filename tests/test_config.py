@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from gw.config import ConfigError, config_from_env, load_config, required_config_items
@@ -138,9 +140,20 @@ database:
     assert config.database.connection == "database/main.sqlite3"
 
 
-def test_missing_database_config_raises_clear_error():
-    with pytest.raises(ConfigError, match="database.type"):
-        load_config([], env={})
+def test_missing_database_config_uses_default_sqlite(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    config = load_config([], env={})
+
+    assert config.database.type == "sqlite3"
+    assert config.database.connection == str(
+        Path(tmp_path, ".gwtracking", "database.db")
+    )
+
+
+def test_non_sqlite_database_requires_connection():
+    with pytest.raises(ConfigError, match="database.connection"):
+        load_config([], env={"GW_DATABASE_TYPE": "mysql"})
 
 
 def test_invalid_yaml_root_raises_clear_error(tmp_path):
@@ -185,5 +198,8 @@ def test_config_from_env_returns_only_present_values():
 def test_required_config_items_document_user_decisions():
     items = required_config_items()
 
-    assert any("database.type" in item for item in items)
-    assert any("database.connection" in item for item in items)
+    assert any("database.type" in item and "默认 sqlite3" in item for item in items)
+    assert any(
+        "database.connection" in item and "~/.gwtracking/database.db" in item
+        for item in items
+    )

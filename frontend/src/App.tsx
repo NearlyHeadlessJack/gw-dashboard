@@ -927,7 +927,7 @@ function OverviewPointMap({
     }
 
     const map = L.map(containerRef.current, {
-      center: [0, 0],
+      center: [30, 0],
       zoom: 2,
       minZoom: 2,
       maxZoom: 2,

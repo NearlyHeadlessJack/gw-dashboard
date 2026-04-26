@@ -132,6 +132,40 @@ def test_launches_api_returns_all_launches_newest_first():
     assert len(dashboard_response.json()["recent_launches"]) == 8
 
 
+def test_satellites_api_returns_all_current_satellites_newest_first():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    group_id = db.create_satellite_group(
+        name="低轨01组",
+        intl_designator="2026-001",
+        launch_time=datetime(2026, 1, 1, 10, 0),
+        satellite_count=11,
+        valid_satellite_count=11,
+    )
+    for index, piece in enumerate("ABCDEFGHIJK"):
+        db.add_group_satellite(
+            group_id,
+            epoch_at=datetime(2026, 1, 1, 11, index),
+            intl_designator=f"2026-001{piece}",
+        )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    satellites_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    satellites_response = satellites_client.get("/api/satellites")
+    dashboard_response = satellites_client.get("/api/dashboard")
+
+    assert satellites_response.status_code == 200
+    satellites = satellites_response.json()
+    assert len(satellites) == 11
+    assert satellites[0]["intl_designator"] == "2026-001K"
+    assert satellites[-1]["intl_designator"] == "2026-001A"
+    assert len(dashboard_response.json()["recent_satellites"]) == 10
+
+
 def test_dashboard_api_aggregates_rocket_statistics_by_model():
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()

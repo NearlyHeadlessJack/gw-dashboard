@@ -398,6 +398,18 @@
   background: rgba(13, 19, 32, 0.96);
 }
 
+.overview-scroll-wrap {
+  max-height: min(42vh, 420px);
+  overflow: auto;
+}
+
+.overview-scroll-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(13, 19, 32, 0.96);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

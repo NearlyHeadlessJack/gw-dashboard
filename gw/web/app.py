@@ -26,6 +26,7 @@ from gw.web.api import (
     get_satellite_history,
     list_groups,
     list_launches,
+    list_satellites,
 )
 
 
@@ -136,6 +137,10 @@ def create_app(
     @app.get("/api/launches")
     def launches() -> Any:
         return _cached(app, "launches", lambda: list_launches(db))
+
+    @app.get("/api/satellites")
+    def satellites() -> Any:
+        return _cached(app, "satellites", lambda: list_satellites(db))
 
     @app.get("/api/groups/{intl_designator}")
     def group_detail(intl_designator: str) -> Any:

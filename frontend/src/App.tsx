@@ -125,10 +125,26 @@ function DashboardLayout() {
 
 function OverviewPage() {
   const { data, loading, error } = useApi<DashboardData>('/api/dashboard')
+  const {
+    data: satellites,
+    loading: satellitesLoading,
+    error: satellitesError,
+  } = useApi<SatellitePreview[]>('/api/satellites')
+  const {
+    data: launches,
+    loading: launchesLoading,
+    error: launchesError,
+  } = useApi<LaunchPreview[]>('/api/launches')
 
-  if (loading) return <LoadingState label="仪表盘同步中" />
-  if (error) return <ErrorState message={error} />
-  if (!data) return <EmptyState label="暂无仪表盘数据" />
+  if (loading || satellitesLoading || launchesLoading) {
+    return <LoadingState label="仪表盘同步中" />
+  }
+  if (error || satellitesError || launchesError) {
+    return <ErrorState message={error ?? satellitesError ?? launchesError ?? ''} />
+  }
+  if (!data || !satellites || !launches) {
+    return <EmptyState label="暂无仪表盘数据" />
+  }
 
   return (
     <div className="page-stack">
@@ -167,10 +183,15 @@ function OverviewPage() {
           icon={Orbit}
           meta={formatDateTime(data.summary.last_updated_at)}
         >
-          <RecentSatellitesTable satellites={data.recent_satellites} />
+          <RecentSatellitesTable satellites={satellites} scrollable />
         </Panel>
-        <Panel className="span-5" title="最近发射" icon={Rocket}>
-          <LaunchList launches={data.recent_launches} />
+        <Panel
+          className="span-5"
+          title="最近发射"
+          icon={Rocket}
+          meta={`${formatNumber(launches.length)} 次`}
+        >
+          <LaunchList launches={launches} scrollable />
         </Panel>
         <Panel className="span-6" title="制造商统计" icon={Factory}>
           <StatBars
@@ -765,12 +786,14 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
 
 function RecentSatellitesTable({
   satellites,
+  scrollable = false,
 }: {
   satellites: SatellitePreview[]
+  scrollable?: boolean
 }) {
   if (satellites.length === 0) return <EmptyState label="暂无卫星数据" compact />
   return (
-    <div className="table-wrap">
+    <div className={`table-wrap${scrollable ? ' overview-scroll-wrap' : ''}`}>
       <table>
         <thead>
           <tr>
@@ -861,10 +884,16 @@ function RocketTable({ rockets }: { rockets: RocketStat[] }) {
   )
 }
 
-function LaunchList({ launches }: { launches: LaunchPreview[] }) {
+function LaunchList({
+  launches,
+  scrollable = false,
+}: {
+  launches: LaunchPreview[]
+  scrollable?: boolean
+}) {
   if (launches.length === 0) return <EmptyState label="暂无发射数据" compact />
   return (
-    <div className="launch-list">
+    <div className={`launch-list${scrollable ? ' overview-scroll-wrap' : ''}`}>
       {launches.map((launch) => (
         <div key={launch.intl_designator} className="launch-item">
           <div>

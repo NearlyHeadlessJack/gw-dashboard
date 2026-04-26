@@ -207,7 +207,7 @@ def test_update_satellite_database_reuses_existing_rows_on_second_update(db):
     )
     group = db.get_satellite_group_by_intl_designator("2024-240")
 
-    update_satellite_database(
+    second_result = update_satellite_database(
         db,
         huiji_group_fetcher=lambda: second_rows,
         group_tle_fetcher=lambda intl_designator, satellite_count: [
@@ -222,6 +222,39 @@ def test_update_satellite_database_reuses_existing_rows_on_second_update(db):
     assert db.get_satellite_group_by_intl_designator("2024-240")["id"] == group["id"]
     assert len(db.list_group_satellites(group["id"])) == 2
     assert db.list_group_satellites(group["id"])[0]["raw_tle"] == parse_tle(RAW_TLE_A)["raw_tle"]
+    assert second_result.group_satellites_updated == 1
+    assert second_result.satellite_records_added == 0
+    assert len(db.get_satellite_history("2024-240A")) == 1
+
+
+def test_update_satellite_database_adds_satellite_history_for_new_epoch(db):
+    rows = [
+        {
+            "名称": "低轨01组A星",
+            "COSPAR": "2024-240",
+            "部署颗数": "1",
+        }
+    ]
+    raw_tle_next_epoch = RAW_TLE_A.replace("26115.49220466", "26116.49220466")
+
+    update_satellite_database(
+        db,
+        huiji_group_fetcher=lambda: rows,
+        group_tle_fetcher=lambda intl_designator, satellite_count: [
+            parse_tle(RAW_TLE_A)
+        ],
+        update_metainfo=False,
+    )
+    result = update_satellite_database(
+        db,
+        huiji_group_fetcher=lambda: rows,
+        group_tle_fetcher=lambda intl_designator, satellite_count: [
+            parse_tle(raw_tle_next_epoch)
+        ],
+        update_metainfo=False,
+    )
+
+    assert result.satellite_records_added == 1
     assert len(db.get_satellite_history("2024-240A")) == 2
 
 

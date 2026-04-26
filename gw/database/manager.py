@@ -764,6 +764,16 @@ class DatabaseManager:
             self._list_rows(self._satellite_table(intl_designator))
         )
 
+    def list_satellite_record_epochs(self, intl_designator: str) -> list[datetime]:
+        """查询单颗卫星历史表中已有的全部历元。"""
+        table_name = self.get_satellite_table_name(intl_designator)
+        if not inspect(self.engine).has_table(table_name):
+            return []
+        self._migrate_satellite_table_schema(intl_designator)
+        table = self._satellite_table(intl_designator)
+        with self.engine.connect() as conn:
+            return list(conn.execute(select(table.c.epoch_at)).scalars().all())
+
     def get_satellite_history(self, intl_designator: str) -> list[RowData]:
         """供 web 查询：按历元从新到旧返回单颗卫星全部历史数据。"""
         try:

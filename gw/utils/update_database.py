@@ -171,6 +171,7 @@ def update_satellite_database(
             group_first_tle_raw: str | None = None
             valid_satellite_count = 0
             invalid_satellite_count = 0
+            satellite_history_epochs: dict[str, set[datetime]] = {}
 
             for parsed_tle in parsed_tles:
                 raw_tle = _raw_tle_from_parsed(parsed_tle)
@@ -212,12 +213,36 @@ def update_satellite_database(
                     }
                 group_satellites_updated += 1
 
-                database.add_satellite_record(
-                    satellite_intl_designator,
-                    epoch_at=epoch_at,
-                    raw_tle=raw_tle,
+                existing_epochs = satellite_history_epochs.get(
+                    satellite_intl_designator
                 )
-                satellite_records_added += 1
+                if existing_epochs is None:
+                    existing_epochs = {
+                        _epoch_compare_value(existing_epoch)
+                        for existing_epoch in database.list_satellite_record_epochs(
+                            satellite_intl_designator
+                        )
+                    }
+                    satellite_history_epochs[satellite_intl_designator] = (
+                        existing_epochs
+                    )
+
+                epoch_key = _epoch_compare_value(epoch_at)
+                if epoch_key in existing_epochs:
+                    logger.debug(
+                        "satellite history record skipped: intl_designator=%s "
+                        "epoch_at=%s",
+                        satellite_intl_designator,
+                        epoch_at,
+                    )
+                else:
+                    database.add_satellite_record(
+                        satellite_intl_designator,
+                        epoch_at=epoch_at,
+                        raw_tle=raw_tle,
+                    )
+                    existing_epochs.add(epoch_key)
+                    satellite_records_added += 1
 
             database.update_satellite_group(
                 group_id,
@@ -460,6 +485,12 @@ def _normalize_satellite_status(value: Any) -> str:
     if value is None:
         return "有效"
     return "失效" if str(value).strip() == "失效" else "有效"
+
+
+def _epoch_compare_value(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _parse_launch_success(value: str | None) -> bool | None:

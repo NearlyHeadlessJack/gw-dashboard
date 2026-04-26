@@ -229,3 +229,24 @@ def test_update_satellite_database_logs_progress(db, caplog):
     assert any("crawler starting: fetching satellite groups" in message for message in messages)
     assert any("crawler starting: fetching TLE for group=2024-240" in message for message in messages)
     assert any("data update complete" in message for message in messages)
+
+
+def test_update_satellite_database_parses_launch_time_without_space(db):
+    update_satellite_database(
+        db,
+        huiji_group_fetcher=lambda: [
+            {
+                "名称": "低轨01组A星",
+                "COSPAR": "2024-240",
+                "部署颗数": "1",
+                "发射时间": "2024年12月16日18:00",
+            }
+        ],
+        group_tle_fetcher=lambda intl_designator, satellite_count: [
+            parse_tle(RAW_TLE_A)
+        ],
+        update_metainfo=False,
+    )
+
+    group = db.get_satellite_group_by_intl_designator("2024-240")
+    assert group["launch_time"] == datetime(2024, 12, 16, 18, 0)

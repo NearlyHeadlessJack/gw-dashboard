@@ -406,7 +406,7 @@ def _parse_datetime(value: str | None) -> datetime | None:
         .replace("/", "-")
     )
     match = re.search(
-        r"(\d{4}-\d{1,2}-\d{1,2})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?",
+        r"(\d{4}-\d{1,2}-\d{1,2})(?:\s*(\d{1,2}:\d{2}(?::\d{2})?))?",
         cleaned,
     )
     if not match:

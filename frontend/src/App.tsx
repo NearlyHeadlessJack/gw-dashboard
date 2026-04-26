@@ -568,19 +568,29 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
 
   const width = 820
   const height = 280
-  const padding = { top: 22, right: 28, bottom: 42, left: 54 }
   const values = chartPoints.flatMap((point) => [
     point.perigee_km ?? 0,
     point.apogee_km ?? 0,
   ])
-  const minValue = Math.min(...values) - 10
-  const maxValue = Math.max(...values) + 10
+  const axis = createAdaptiveKmAxis(values)
+  const longestYAxisLabel = Math.max(
+    ...axis.ticks.map((tick) => formatAxisKm(tick).length),
+  )
+  const padding = {
+    top: 22,
+    right: 28,
+    bottom: 42,
+    left: Math.min(96, Math.max(58, longestYAxisLabel * 7 + 16)),
+  }
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
+  const xLabelStep = Math.max(1, Math.ceil(chartPoints.length / 8))
   const xFor = (index: number) =>
     padding.left + (plotWidth * index) / Math.max(chartPoints.length - 1, 1)
   const yFor = (value: number) =>
-    padding.top + plotHeight - ((value - minValue) / (maxValue - minValue)) * plotHeight
+    padding.top +
+    plotHeight -
+    ((value - axis.min) / Math.max(axis.max - axis.min, 1)) * plotHeight
   const pathFor = (field: 'perigee_km' | 'apogee_km') =>
     chartPoints
       .map((point, index) => {
@@ -606,11 +616,10 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
           y2={height - padding.bottom}
           className="chart-axis"
         />
-        {[0, 0.5, 1].map((ratio) => {
-          const y = padding.top + plotHeight * ratio
-          const value = maxValue - (maxValue - minValue) * ratio
+        {axis.ticks.map((value) => {
+          const y = yFor(value)
           return (
-            <g key={ratio}>
+            <g key={value}>
               <line
                 x1={padding.left}
                 y1={y}
@@ -619,7 +628,7 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
                 className="chart-grid"
               />
               <text x={12} y={y + 4} className="chart-label">
-                {Math.round(value)}km
+                {formatAxisKm(value)}
               </text>
             </g>
           )
@@ -640,14 +649,16 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
               r="3.5"
               className="chart-dot perigee"
             />
-            <text
-              x={xFor(index)}
-              y={height - 15}
-              textAnchor="middle"
-              className="chart-date"
-            >
-              {formatShortDate(point.epoch_at)}
-            </text>
+            {(index % xLabelStep === 0 || index === chartPoints.length - 1) && (
+              <text
+                x={xFor(index)}
+                y={height - 15}
+                textAnchor="middle"
+                className="chart-date"
+              >
+                {formatShortDate(point.epoch_at)}
+              </text>
+            )}
           </g>
         ))}
       </svg>
@@ -1024,6 +1035,41 @@ function formatNumber(value: number | null | undefined): string {
 function formatKm(value: number | null): string {
   if (value === null) return '-'
   return `${Math.round(value).toLocaleString('zh-CN')} km`
+}
+
+function formatAxisKm(value: number): string {
+  return `${Math.round(value).toLocaleString('zh-CN')} km`
+}
+
+function createAdaptiveKmAxis(values: number[]) {
+  const rawMin = Math.min(...values)
+  const rawMax = Math.max(...values)
+  const spread = rawMax - rawMin
+  const fallbackSpread = Math.max(Math.abs(rawMax) * 0.02, 20)
+  const paddedMin = rawMin - (spread > 0 ? spread * 0.08 : fallbackSpread / 2)
+  const paddedMax = rawMax + (spread > 0 ? spread * 0.08 : fallbackSpread / 2)
+  const tickCount = 5
+  const step = Math.max(1, niceNumber((paddedMax - paddedMin) / (tickCount - 1)))
+  let min = Math.floor(paddedMin / step) * step
+  const max = Math.ceil(paddedMax / step) * step
+
+  if (rawMin >= 0 && min < 0) min = 0
+
+  const ticks: number[] = []
+  for (let value = min; value <= max + step * 0.5; value += step) {
+    ticks.push(Number(value.toFixed(6)))
+  }
+
+  return { min, max, ticks }
+}
+
+function niceNumber(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 1
+  const exponent = Math.floor(Math.log10(value))
+  const fraction = value / 10 ** exponent
+  const niceFraction =
+    fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
+  return niceFraction * 10 ** exponent
 }
 
 function formatDegree(value: number | null): string {

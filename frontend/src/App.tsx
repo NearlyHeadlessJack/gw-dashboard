@@ -69,6 +69,8 @@ const LEO_TRACK_COLORS = [
   '#d2b4de',
   '#73c6b6',
 ]
+const OVERVIEW_MAP_GEO_COLOR = '#ef4444'
+const OVERVIEW_MAP_DEFAULT_COLOR = '#2563eb'
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -586,11 +588,14 @@ function OverviewPointMap({
     if (!overlayLayer || !payload) return
 
     overlayLayer.clearLayers()
-    payload.satellites.forEach((satellite, index) => {
+    payload.satellites.forEach((satellite) => {
       const position = propagateTlePosition(satellite.raw_tle, now)
       if (!position) return
 
-      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      const color =
+        satellite.orbit_type === 'geo'
+          ? OVERVIEW_MAP_GEO_COLOR
+          : OVERVIEW_MAP_DEFAULT_COLOR
       const marker = L.circleMarker(pointToLatLng(position), {
         radius: 3.6,
         color: '#ffffff',

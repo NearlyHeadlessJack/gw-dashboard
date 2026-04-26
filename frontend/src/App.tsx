@@ -85,6 +85,7 @@ const EXPORT_MAP_WIDTH = 1600
 const EXPORT_MAP_HEIGHT = 900
 const EXPORT_MAP_ZOOM = 2
 const EXPORT_MERCATOR_MAX_LAT = 85.05112878
+const PROJECT_GITHUB_URL = 'https://github.com/NearlyHeadlessJack/gw-dashboard'
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -1412,7 +1413,7 @@ function App() {
           >
             <span>数据均来自公开信息，仅供学习参考。</span>
             <a
-              href="https://github.com/NearlyHeadlessJack/gw-dashboard"
+              href={PROJECT_GITHUB_URL}
               target="_blank"
               rel="noreferrer"
             >
@@ -1611,16 +1612,17 @@ function drawExportMapCaption(
   satelliteCount: number,
   now: Date,
 ) {
-  const iso = now.toISOString()
-  const timestamp = `${iso.slice(0, 10)} ${iso.slice(11, 19)}Z`
+  const exportedAt = formatBeijingDateTime(now)
   context.save()
   context.fillStyle = 'rgba(255, 255, 255, 0.9)'
-  context.fillRect(24, 24, 350, 64)
+  context.fillRect(24, 24, 520, 116)
   context.fillStyle = '#172033'
   context.font = '700 19px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
   context.fillText('星网卫星位置图', 42, 52)
   context.font = '500 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
-  context.fillText(`${formatNumber(satelliteCount)} 颗 · ${timestamp}`, 42, 76)
+  context.fillText(`${formatNumber(satelliteCount)} 颗 · 北京时间 ${exportedAt}`, 42, 76)
+  context.fillText('由 GW-Tracking 工具导出', 42, 100)
+  context.fillText(PROJECT_GITHUB_URL, 42, 124)
   context.restore()
 }
 
@@ -1793,6 +1795,24 @@ function formatTime(value: string | null | undefined): string {
   if (Number.isNaN(date.getTime())) return '---- -- -- --:--:--Z'
   const iso = date.toISOString()
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)}Z`
+}
+
+function formatBeijingDateTime(value: Date): string {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(value)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part(
+    'minute',
+  )}:${part('second')}`
 }
 
 function rocketName(

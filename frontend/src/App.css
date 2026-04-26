@@ -1,4 +1,5 @@
 .app {
+  --app-chrome-offset: 92px;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -6,6 +7,48 @@
     radial-gradient(circle at 12% 0%, rgba(35, 130, 190, 0.22), transparent 28%),
     radial-gradient(circle at 82% 8%, rgba(222, 154, 53, 0.12), transparent 26%),
     var(--bg-void);
+}
+
+.app.notice-hidden {
+  --app-chrome-offset: 56px;
+}
+
+.public-data-notice {
+  position: relative;
+  z-index: 11;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 7px 48px;
+  color: #163042;
+  background: #dff5ff;
+  border-bottom: 1px solid rgba(52, 152, 219, 0.28);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.notice-close {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #163042;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(52, 152, 219, 0.28);
+  border-radius: 6px;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.notice-close:hover {
+  color: #071421;
+  background: #ffffff;
 }
 
 .top-nav {
@@ -226,7 +269,7 @@
 .dashboard-content::before {
   content: '';
   position: fixed;
-  inset: 56px 0 0 214px;
+  inset: var(--app-chrome-offset) 0 0 214px;
   pointer-events: none;
   background-image:
     linear-gradient(rgba(60, 78, 112, 0.13) 1px, transparent 1px),

@@ -36,6 +36,7 @@ import {
   Satellite,
   Search,
   Waypoints,
+  X,
 } from 'lucide-react'
 import { useApi } from './api'
 import { generatePreviousOrbitTrack, propagateTlePosition } from './orbit'
@@ -1351,9 +1352,24 @@ function EmptyState({
 
 function App() {
   const now = useClock()
+  const [noticeDismissed, setNoticeDismissed] = useState(false)
   return (
     <BrowserRouter>
-      <div className="app">
+      <div className={`app ${noticeDismissed ? 'notice-hidden' : 'notice-visible'}`}>
+        {!noticeDismissed && (
+          <div className="public-data-notice" role="status">
+            <span>数据均来自公开信息，仅供学习参考。</span>
+            <button
+              className="notice-close"
+              type="button"
+              onClick={() => setNoticeDismissed(true)}
+              aria-label="关闭通知"
+              title="关闭通知"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
         <header className="top-nav">
           <div className="nav-brand">
             <Crosshair size={19} />

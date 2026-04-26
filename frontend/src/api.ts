@@ -18,7 +18,14 @@ export async function fetchApi<T>(
   path: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, { signal })
+  return requestApi<T>(path, { signal })
+}
+
+export async function requestApi<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, options)
   if (!response.ok) {
     const message = await readErrorMessage(response)
     throw new Error(message || `HTTP ${response.status}`)

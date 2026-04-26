@@ -198,6 +198,61 @@ def test_time_api_returns_503_when_ntp_time_unavailable():
     assert response.json()["detail"] == "无法从 ntp2.aliyun.com 获取标准时间"
 
 
+def test_server_status_api_returns_and_updates_valid_duration():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.set_metainfo(
+        datetime(2026, 4, 26, 8, 0, tzinfo=timezone.utc),
+        valid_duration_seconds=3600,
+        satellite_record_limit=100,
+    )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    status_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    response = status_client.get("/api/server/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "last_updated_at": "2026-04-26T08:00:00Z",
+        "valid_duration_seconds": 3600,
+        "expires_at": "2026-04-26T09:00:00Z",
+        "expired": True,
+    }
+
+    update_response = status_client.put(
+        "/api/server/status",
+        json={"valid_duration_seconds": 7200},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["valid_duration_seconds"] == 7200
+    assert update_response.json()["expires_at"] == "2026-04-26T10:00:00Z"
+    assert db.get_metainfo()["valid_duration_seconds"] == 7200
+
+
+def test_server_status_api_rejects_invalid_valid_duration():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    status_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    response = status_client.put(
+        "/api/server/status",
+        json={"valid_duration_seconds": -1},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "数据有效期不能为负数"
+
+
 def test_api_renames_wuyuan_manufacturer_for_frontend(client):
     groups = client.get("/api/groups").json()
     satellites = client.get("/api/satellites").json()
@@ -538,6 +593,7 @@ def test_backend_serves_frontend_dist_as_single_process_app(tmp_path):
 
     assert frontend_client.get("/").text == "<main>GW Dashboard</main>"
     assert frontend_client.get("/dashboard/history").text == "<main>GW Dashboard</main>"
+    assert frontend_client.get("/dashboard/server").text == "<main>GW Dashboard</main>"
     assert frontend_client.get("/map").text == "<main>GW Dashboard</main>"
     assert frontend_client.get("/assets/app.js").text == "console.log('gw')"
     assert frontend_client.get("/api/not-found").status_code == 404

@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
   type PointerEvent,
 } from 'react'
 import {
@@ -36,10 +37,11 @@ import {
   Rocket,
   Satellite,
   Search,
+  Server,
   Waypoints,
   X,
 } from 'lucide-react'
-import { fetchApi, useApi } from './api'
+import { fetchApi, requestApi, useApi } from './api'
 import { generatePreviousOrbitTrack, propagateTlePosition } from './orbit'
 import type {
   DashboardData,
@@ -53,6 +55,7 @@ import type {
   OrbitSummary,
   RocketStat,
   SatellitePreview,
+  ServerStatusData,
   TimePayload,
 } from './types'
 import './App.css'
@@ -97,6 +100,7 @@ const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard/orbits', label: '组与单星', icon: Orbit },
   { path: '/dashboard/launches', label: '发射统计', icon: Rocket },
   { path: '/dashboard/history', label: '历史轨道', icon: History },
+  { path: '/dashboard/server', label: '服务器状态', icon: Server },
 ]
 
 function useClock() {
@@ -200,6 +204,7 @@ function DashboardLayout() {
           <Route path="orbits" element={<OrbitExplorerPage />} />
           <Route path="launches" element={<LaunchStatsPage />} />
           <Route path="history" element={<HistoryPage />} />
+          <Route path="server" element={<ServerStatusPage />} />
         </Routes>
       </main>
     </div>
@@ -496,6 +501,99 @@ function HistoryPage() {
         {historyError && <ErrorState message={historyError} compact />}
         {!historyLoading && history && <HistoryChart points={history} />}
       </Panel>
+    </div>
+  )
+}
+
+function ServerStatusPage() {
+  const [refreshKey, setRefreshKey] = useState(0)
+  const { data, loading, error } = useApi<ServerStatusData>(
+    '/api/server/status',
+    refreshKey,
+  )
+  const [validDurationInput, setValidDurationInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (data) {
+      setValidDurationInput(String(data.valid_duration_seconds))
+    }
+  }, [data])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const validDurationSeconds = Number(validDurationInput)
+    if (
+      !Number.isInteger(validDurationSeconds) ||
+      validDurationSeconds < 0
+    ) {
+      setSaveError('有效期必须是非负整数秒')
+      setSaveMessage(null)
+      return
+    }
+
+    setSaving(true)
+    setSaveError(null)
+    setSaveMessage(null)
+    try {
+      const updated = await requestApi<ServerStatusData>('/api/server/status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          valid_duration_seconds: validDurationSeconds,
+        }),
+      })
+      setValidDurationInput(String(updated.valid_duration_seconds))
+      setSaveMessage('已保存')
+      setRefreshKey((value) => value + 1)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <LoadingState label="服务器状态同步中" />
+  if (error) return <ErrorState message={error} />
+  if (!data) return <EmptyState label="暂无服务器状态" />
+
+  return (
+    <div className="page-stack">
+      <div className="dashboard-grid">
+        <Panel className="span-6" title="服务器状态" icon={Server}>
+          <InfoGrid
+            rows={[
+              ['上次爬取时间', formatLaunchDateTime(data.last_updated_at)],
+              ['数据有效至', formatLaunchDateTime(data.expires_at)],
+              ['当前状态', data.expired ? '已过期' : '有效'],
+              ['当前有效期', formatDurationSeconds(data.valid_duration_seconds)],
+            ]}
+          />
+        </Panel>
+        <Panel className="span-6" title="数据有效期" icon={Clock}>
+          <form className="settings-form" onSubmit={handleSubmit}>
+            <label className="field">
+              <span>有效期（秒）</span>
+              <input
+                type="number"
+                min="0"
+                step="60"
+                value={validDurationInput}
+                onChange={(event) => setValidDurationInput(event.target.value)}
+              />
+            </label>
+            <div className="settings-actions">
+              <button className="primary-button" type="submit" disabled={saving}>
+                {saving ? '保存中' : '保存'}
+              </button>
+              {saveMessage && <span className="settings-message">{saveMessage}</span>}
+              {saveError && <span className="settings-error">{saveError}</span>}
+            </div>
+          </form>
+        </Panel>
+      </div>
     </div>
   )
 }
@@ -1964,6 +2062,14 @@ function splitTrackByDateline(track: GeoPoint[]): L.LatLngTuple[][] {
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return '-'
   return new Intl.NumberFormat('zh-CN').format(value)
+}
+
+function formatDurationSeconds(value: number): string {
+  if (value < 60) return `${formatNumber(value)} 秒`
+  if (value % 86_400 === 0) return `${formatNumber(value / 86_400)} 天`
+  if (value % 3_600 === 0) return `${formatNumber(value / 3_600)} 小时`
+  if (value % 60 === 0) return `${formatNumber(value / 60)} 分钟`
+  return `${formatNumber(value)} 秒`
 }
 
 function formatKm(value: number | null): string {

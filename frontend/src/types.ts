@@ -78,6 +78,13 @@ export type TimePayload = {
   cached: boolean
 }
 
+export type ServerStatusData = {
+  last_updated_at: string | null
+  valid_duration_seconds: number
+  expires_at: string | null
+  expired: boolean
+}
+
 export type GroupSummary = {
   id: number
   name: string

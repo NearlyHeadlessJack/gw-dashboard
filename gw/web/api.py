@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from gw.database import DatabaseManager
+from gw.database import DatabaseConfigurationError, DatabaseManager
 from gw.utils.rocket import split_rocket_name_and_serial
 
 
@@ -77,6 +77,55 @@ def get_satellite_history(database: DatabaseManager, intl_designator: str) -> li
         _history_point(row)
         for row in reversed(database.get_satellite_history(intl_designator))
     ]
+
+
+def get_server_status(database: DatabaseManager, *, at: datetime | None = None) -> Row:
+    """返回 Web 服务器和数据更新元信息。"""
+    moment = _as_utc(at)
+    metainfo = database.get_metainfo()
+    if metainfo is None:
+        return {
+            "last_updated_at": None,
+            "valid_duration_seconds": 0,
+            "expires_at": None,
+            "expired": True,
+        }
+
+    last_updated_at = metainfo.get("last_updated_at")
+    last_updated = _as_utc(last_updated_at) if last_updated_at is not None else None
+    valid_duration_seconds = _int(metainfo.get("valid_duration_seconds"))
+    expires_at = (
+        last_updated + timedelta(seconds=valid_duration_seconds)
+        if last_updated is not None
+        else None
+    )
+    return {
+        "last_updated_at": _iso_z(last_updated),
+        "valid_duration_seconds": valid_duration_seconds,
+        "expires_at": _iso_z(expires_at),
+        "expired": database.is_update_expired(moment),
+    }
+
+
+def update_server_status(
+    database: DatabaseManager,
+    *,
+    valid_duration_seconds: int,
+) -> Row:
+    """更新服务器数据有效期设置。"""
+    if valid_duration_seconds < 0:
+        raise DatabaseConfigurationError("数据有效期不能为负数")
+
+    metainfo = database.get_metainfo()
+    if metainfo is None:
+        database.set_metainfo(
+            None,
+            valid_duration_seconds=valid_duration_seconds,
+            satellite_record_limit=None,
+        )
+    else:
+        database.update_metainfo(valid_duration_seconds=valid_duration_seconds)
+    return get_server_status(database)
 
 
 def build_map_satellites(
@@ -437,6 +486,12 @@ def _as_utc(value: datetime | None) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _iso_z(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return _as_utc(value).isoformat().replace("+00:00", "Z")
 
 
 def _int(value: Any) -> int:

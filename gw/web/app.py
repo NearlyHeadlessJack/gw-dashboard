@@ -24,11 +24,13 @@ from gw.web.api import (
     build_map_points,
     build_map_satellites,
     get_group_detail,
+    get_server_status,
     get_satellite_detail,
     get_satellite_history,
     list_groups,
     list_launches,
     list_satellites,
+    update_server_status,
 )
 from gw.web.runtime import log_frontend_entry
 from gw.web.time_service import (
@@ -141,7 +143,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=app_config.backend.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET"],
+        allow_methods=["GET", "PUT"],
         allow_headers=["*"],
     )
 
@@ -159,6 +161,29 @@ def create_app(
             return ntp_snapshot_to_payload(ntp_time_service.current_time())
         except NtpTimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/server/status")
+    def server_status() -> Any:
+        return _handle_database_errors(lambda: get_server_status(db))
+
+    @app.put("/api/server/status")
+    def update_server_status_endpoint(payload: dict[str, Any]) -> Any:
+        raw_value = payload.get("valid_duration_seconds")
+        try:
+            valid_duration_seconds = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="数据有效期必须是整数秒") from exc
+
+        if valid_duration_seconds < 0:
+            raise HTTPException(status_code=400, detail="数据有效期不能为负数")
+
+        app.state.cache.clear()
+        return _handle_database_errors(
+            lambda: update_server_status(
+                db,
+                valid_duration_seconds=valid_duration_seconds,
+            )
+        )
 
     @app.get("/api/dashboard")
     def dashboard() -> Any:

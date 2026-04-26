@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import {
   BrowserRouter,
   Navigate,
@@ -561,6 +561,7 @@ function SatelliteDetailView({ satellite }: { satellite: SatellitePreview }) {
 }
 
 function HistoryChart({ points }: { points: HistoryPoint[] }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const chartPoints = points.filter(
     (point) => point.perigee_km !== null && point.apogee_km !== null,
   )
@@ -598,10 +599,49 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
         return `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(2)} ${yFor(value).toFixed(2)}`
       })
       .join(' ')
+  const activeIndex =
+    hoverIndex === null
+      ? null
+      : Math.min(Math.max(hoverIndex, 0), chartPoints.length - 1)
+  const activePoint = activeIndex === null ? null : chartPoints[activeIndex]
+  const tooltipWidth = 168
+  const tooltipHeight = 68
+  const tooltipX =
+    activeIndex === null
+      ? 0
+      : Math.min(
+          width - padding.right - tooltipWidth,
+          Math.max(padding.left + 8, xFor(activeIndex) + 12),
+        )
+  const tooltipY =
+    activePoint === null
+      ? 0
+      : Math.min(
+          height - padding.bottom - tooltipHeight - 8,
+          Math.max(
+            padding.top + 8,
+            Math.min(
+              yFor(activePoint.apogee_km ?? 0),
+              yFor(activePoint.perigee_km ?? 0),
+            ) - 18,
+          ),
+        )
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const viewX = ((event.clientX - rect.left) / rect.width) * width
+    const ratio = Math.min(1, Math.max(0, (viewX - padding.left) / plotWidth))
+    setHoverIndex(Math.round(ratio * Math.max(chartPoints.length - 1, 0)))
+  }
 
   return (
     <div className="chart-wrap">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="历史轨道折线图">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="历史轨道折线图"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={() => setHoverIndex(null)}
+      >
         <line
           x1={padding.left}
           y1={height - padding.bottom}
@@ -661,6 +701,48 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
             )}
           </g>
         ))}
+        {activePoint && activeIndex !== null && (
+          <>
+            <line
+              x1={xFor(activeIndex)}
+              y1={padding.top}
+              x2={xFor(activeIndex)}
+              y2={height - padding.bottom}
+              className="chart-hover-line"
+            />
+            <circle
+              cx={xFor(activeIndex)}
+              cy={yFor(activePoint.apogee_km ?? 0)}
+              r="6"
+              className="chart-dot apogee active"
+            />
+            <circle
+              cx={xFor(activeIndex)}
+              cy={yFor(activePoint.perigee_km ?? 0)}
+              r="6"
+              className="chart-dot perigee active"
+            />
+            <g className="chart-tooltip" transform={`translate(${tooltipX} ${tooltipY})`}>
+              <rect width={tooltipWidth} height={tooltipHeight} rx="7" />
+              <text x="12" y="19" className="chart-tooltip-title">
+                {formatDateTime(activePoint.epoch_at)}
+              </text>
+              <text x="12" y="40" className="chart-tooltip-apogee">
+                远地点 {formatKm(activePoint.apogee_km)}
+              </text>
+              <text x="12" y="58" className="chart-tooltip-perigee">
+                近地点 {formatKm(activePoint.perigee_km)}
+              </text>
+            </g>
+          </>
+        )}
+        <rect
+          x={padding.left}
+          y={padding.top}
+          width={plotWidth}
+          height={plotHeight}
+          className="chart-hit-area"
+        />
       </svg>
       <div className="legend-row">
         <span className="legend-item apogee">远地点</span>

@@ -664,6 +664,51 @@ tbody tr:hover td {
   fill: var(--success);
 }
 
+.chart-dot.active {
+  stroke: var(--bg-deep);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 8px rgba(232, 238, 247, 0.32));
+}
+
+.chart-hover-line {
+  stroke: rgba(232, 238, 247, 0.42);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+
+.chart-tooltip {
+  pointer-events: none;
+}
+
+.chart-tooltip rect {
+  fill: rgba(9, 13, 22, 0.94);
+  stroke: rgba(125, 147, 181, 0.36);
+  stroke-width: 1;
+}
+
+.chart-tooltip text {
+  font-size: 12px;
+}
+
+.chart-tooltip-title {
+  fill: var(--text-primary);
+  font-weight: 700;
+}
+
+.chart-tooltip-apogee {
+  fill: var(--warning);
+}
+
+.chart-tooltip-perigee {
+  fill: var(--success);
+}
+
+.chart-hit-area {
+  cursor: crosshair;
+  fill: transparent;
+  pointer-events: all;
+}
+
 .legend-row {
   display: flex;
   gap: 16px;

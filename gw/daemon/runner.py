@@ -54,6 +54,7 @@ class DashboardDaemon(threading.Thread):
         self.data_updater = data_updater or self._update_data
         self._stop_event = threading.Event()
         self._services_started = False
+        self._initial_data_prepared = False
         self.last_cycle_result: DaemonCycleResult | None = None
         self.last_error: BaseException | None = None
 
@@ -68,26 +69,45 @@ class DashboardDaemon(threading.Thread):
         self._stop_event.set()
 
     def run(self) -> None:
-        """线程入口：启动占位服务，然后循环检查数据库是否过期。"""
+        """线程入口：先准备初始数据，再启动运行时服务并循环检查更新。"""
         logger.info(
             "daemon starting: check_interval=%ss",
             self.check_interval_seconds,
         )
         try:
+            if not self._initial_data_prepared:
+                self.prepare_initial_data()
             self.start_runtime_services()
         except Exception as exc:
             self.last_error = exc
-            logger.exception("daemon runtime service startup failed")
+            logger.exception("daemon startup failed")
             return
 
-        while not self._stop_event.is_set():
+        while not self._stop_event.wait(self.check_interval_seconds):
             try:
                 self.last_cycle_result = self.run_cycle()
             except Exception as exc:
                 self.last_error = exc
                 logger.exception("daemon cycle failed")
-            self._stop_event.wait(self.check_interval_seconds)
         logger.info("daemon stopped")
+
+    def prepare_initial_data(self) -> DaemonCycleResult:
+        """启动运行时服务前执行一次数据检查，必要时同步更新数据。"""
+        if self._initial_data_prepared and self.last_cycle_result is not None:
+            logger.info("daemon initial data already prepared")
+            return self.last_cycle_result
+
+        logger.info("daemon initial data preparation starting")
+        result = self.run_cycle()
+        self.last_cycle_result = result
+        self._initial_data_prepared = True
+        logger.info(
+            "daemon initial data preparation complete: update_ran=%s "
+            "expired_after_update=%s",
+            result.update_ran,
+            result.expired_after_update,
+        )
+        return result
 
     def start_runtime_services(self) -> None:
         """首次运行 daemon 时启动后端 web 服务和前端服务。"""

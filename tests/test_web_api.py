@@ -4,8 +4,15 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from gw.config import AppConfig, BackendConfig, DatabaseConfig, FrontendConfig
+from gw.config import (
+    AppConfig,
+    BackendConfig,
+    DaemonConfig,
+    DatabaseConfig,
+    FrontendConfig,
+)
 from gw.database import DatabaseManager
+from gw.web import app as web_app
 from gw.web.app import create_app
 
 
@@ -383,3 +390,64 @@ def test_backend_logs_frontend_entry_when_lifespan_starts(caplog):
         "web service started: frontend entry URL: http://127.0.0.1:8123"
         in caplog.text
     )
+
+
+def test_backend_runs_initial_update_before_frontend_entry(monkeypatch):
+    db = DatabaseManager("sqlite3", ":memory:")
+    events = []
+
+    def fake_update(database, *, now):
+        events.append("update")
+        database.set_metainfo(
+            now,
+            valid_duration_seconds=3600,
+            satellite_record_limit=1000,
+        )
+
+    monkeypatch.setattr(web_app, "update_satellite_database", fake_update)
+    monkeypatch.setattr(
+        web_app,
+        "log_frontend_entry",
+        lambda logger, config: events.append("frontend"),
+    )
+
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        daemon=DaemonConfig(
+            update_check_interval_seconds=3600,
+            data_valid_duration_seconds=3600,
+            satellite_record_limit=1000,
+        ),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+
+    with TestClient(web_app.create_app(config, database=db)):
+        events.append("client")
+
+    assert events[:2] == ["update", "frontend"]
+
+
+def test_backend_does_not_block_startup_update_when_data_was_updated(monkeypatch):
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.set_metainfo(
+        datetime.now(timezone.utc),
+        valid_duration_seconds=3600,
+        satellite_record_limit=1000,
+    )
+
+    def unexpected_update(database, *, now):
+        raise AssertionError("initial update should not run for initialized database")
+
+    monkeypatch.setattr(web_app, "update_satellite_database", unexpected_update)
+
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        daemon=DaemonConfig(update_check_interval_seconds=3600),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+
+    with TestClient(web_app.create_app(config, database=db)):
+        pass

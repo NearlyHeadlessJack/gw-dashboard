@@ -73,6 +73,7 @@ def create_app(
     )
     logger.info("database initializing: type=%s", app_config.database.type)
     db.initialize_database()
+    needs_initial_update = _needs_initial_data_update(db)
     _ensure_metainfo_defaults(db, app_config)
     cache = TtlCache()
 
@@ -82,6 +83,12 @@ def create_app(
         if start_daemon:
             daemon = _create_data_daemon(app_config, db)
             app.state.daemon = daemon
+            if needs_initial_update:
+                logger.info(
+                    "database has no completed update; running initial crawler "
+                    "update before web service startup"
+                )
+                daemon.prepare_initial_data()
             logger.info(
                 "daemon launching in background: interval=%ss valid_duration=%ss "
                 "satellite_record_limit=%s",
@@ -204,6 +211,11 @@ def create_app(
 
     _mount_frontend(app, app_config)
     return app
+
+
+def _needs_initial_data_update(database: DatabaseManager) -> bool:
+    metainfo = database.get_metainfo()
+    return metainfo is None or metainfo["last_updated_at"] is None
 
 
 def _ensure_metainfo_defaults(database: DatabaseManager, config: AppConfig) -> None:

@@ -131,3 +131,28 @@ def test_daemon_runs_as_thread_and_stop_wakes_sleep():
     assert daemon.is_alive() is False
     assert calls == ["web", "frontend"]
     assert daemon.last_cycle_result == DaemonCycleResult(False, False, False)
+
+
+def test_daemon_updates_initial_data_before_starting_runtime_services():
+    calls = []
+    services_ready = threading.Event()
+    database = FakeDatabase([True, False])
+
+    daemon = DashboardDaemon(
+        make_config(interval=60),
+        database,
+        web_server_starter=lambda: calls.append("web"),
+        frontend_server_starter=lambda: (
+            calls.append("frontend") or services_ready.set()
+        ),
+        data_updater=lambda: calls.append("update"),
+    )
+
+    daemon.start()
+    assert services_ready.wait(timeout=1)
+    daemon.stop()
+    daemon.join(timeout=1)
+
+    assert daemon.is_alive() is False
+    assert calls == ["update", "web", "frontend"]
+    assert daemon.last_cycle_result == DaemonCycleResult(True, True, False)

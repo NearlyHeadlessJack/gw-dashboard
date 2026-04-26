@@ -5,6 +5,9 @@ from __future__ import annotations
 import sys
 from typing import Protocol, TextIO
 
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
+
 
 class UpdateProgressReporter(Protocol):
     """数据库更新过程进度回调。"""
@@ -94,6 +97,9 @@ class ConsoleUpdateProgressReporter:
     def __init__(self, stream: TextIO | None = None, *, bar_width: int = 24) -> None:
         self.stream = stream or sys.stderr
         self.bar_width = bar_width
+        self.console = Console(file=self.stream)
+        self._progress: Progress | None = None
+        self._tle_task_id: TaskID | None = None
 
     def first_run_waiting(self) -> None:
         self._write_line("首次运行，请等待爬取数据完成")
@@ -102,13 +108,26 @@ class ConsoleUpdateProgressReporter:
         self._write_line("正在获取卫星发射信息")
 
     def launch_fetch_finished(self, group_count: int) -> None:
-        self._write_line(f"卫星发射信息获取成功，共 {group_count} 组")
+        self._write_line("卫星发射信息获取完成")
 
     def tle_fetch_started(self, total_groups: int) -> None:
         if total_groups <= 0:
             self._write_line("没有需要获取 TLE 的卫星组")
             return
-        self._write_line(f"正在获取 TLE 数据，共 {total_groups} 组")
+        self._progress = Progress(
+            TextColumn("{task.description}"),
+            BarColumn(bar_width=self.bar_width),
+            TextColumn("{task.completed}/{task.total}"),
+            TextColumn("{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=self.console,
+            transient=False,
+        )
+        self._progress.start()
+        self._tle_task_id = self._progress.add_task(
+            "正在获取 TLE 数据",
+            total=total_groups,
+        )
 
     def tle_group_started(
         self,
@@ -116,9 +135,7 @@ class ConsoleUpdateProgressReporter:
         total_groups: int,
         intl_designator: str,
     ) -> None:
-        if total_groups <= 0:
-            return
-        self._write_progress(index - 1, total_groups, f"{intl_designator} 获取中")
+        pass
 
     def tle_group_finished(
         self,
@@ -127,9 +144,8 @@ class ConsoleUpdateProgressReporter:
         intl_designator: str,
         tle_count: int,
     ) -> None:
-        if total_groups <= 0:
-            return
-        self._write_progress(index, total_groups, f"{intl_designator} {tle_count} 条")
+        if self._progress is not None and self._tle_task_id is not None:
+            self._progress.update(self._tle_task_id, completed=index)
 
     def tle_group_failed(
         self,
@@ -137,20 +153,19 @@ class ConsoleUpdateProgressReporter:
         total_groups: int,
         intl_designator: str,
     ) -> None:
-        if total_groups <= 0:
-            return
-        self._write_progress(index - 1, total_groups, f"{intl_designator} 获取失败")
+        self._stop_progress()
+        self._write_line("TLE 数据获取失败")
 
     def tle_fetch_finished(self, total_groups: int) -> None:
         if total_groups > 0:
+            self._stop_progress()
             self._write_line("TLE 数据获取完成")
 
-    def _write_progress(self, current: int, total: int, detail: str) -> None:
-        current = max(0, min(current, total))
-        filled = round(self.bar_width * current / total)
-        bar = "#" * filled + "-" * (self.bar_width - filled)
-        percent = round(100 * current / total)
-        self._write_line(f"TLE [{bar}] {current}/{total} {percent:3d}% {detail}")
+    def _stop_progress(self) -> None:
+        if self._progress is not None:
+            self._progress.stop()
+            self._progress = None
+            self._tle_task_id = None
 
     def _write_line(self, message: str) -> None:
-        print(message, file=self.stream, flush=True)
+        self.console.print(message)

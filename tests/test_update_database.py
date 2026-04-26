@@ -335,11 +335,16 @@ def test_console_update_progress_reporter_outputs_first_run_and_tle_bar():
     output = stream.getvalue()
     assert "首次运行，请等待爬取数据完成" in output
     assert "正在获取卫星发射信息" in output
-    assert "卫星发射信息获取成功，共 2 组" in output
-    assert "正在获取 TLE 数据，共 2 组" in output
-    assert "TLE [#####-----] 1/2  50% 2024-240 1 条" in output
-    assert "TLE [##########] 2/2 100% 2024-241 3 条" in output
+    assert "卫星发射信息获取完成" in output
+    assert "正在获取 TLE 数据" in output
+    assert "2/2" in output
+    assert "100%" in output
     assert "TLE 数据获取完成" in output
+    assert "共 2 组" not in output
+    assert "2024-240" not in output
+    assert "2024-241" not in output
+    assert "1 条" not in output
+    assert "3 条" not in output
 
 
 def test_update_satellite_database_parses_launch_time_without_space(db):

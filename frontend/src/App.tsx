@@ -441,6 +441,7 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
       zoomControl: false,
     })
 
+    map.attributionControl.setPrefix(false)
     L.control.zoom({ position: 'bottomright' }).addTo(map)
     L.tileLayer(GAODE_STANDARD_TILE_URL, {
       subdomains: ['1', '2', '3', '4'],
@@ -555,6 +556,7 @@ function OverviewPointMap({
       keyboard: false,
     })
 
+    map.attributionControl.setPrefix(false)
     L.tileLayer(GAODE_STANDARD_TILE_URL, {
       subdomains: ['1', '2', '3', '4'],
       minZoom: 2,

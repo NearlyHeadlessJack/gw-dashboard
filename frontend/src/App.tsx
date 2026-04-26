@@ -1561,10 +1561,18 @@ function satelliteGroupKey(satellite: MapSatellitePoint): string {
 
 function satelliteMapTooltip(satellite: MapSatellitePoint): string {
   const labelName = satellite.group_name ?? satellite.group_intl_designator ?? '-'
-  const orbitLabel = `${formatKm(satellite.orbit.perigee_km)} × ${formatKm(
-    satellite.orbit.apogee_km,
-  )}`
-  return `${labelName}<br>${mapTooltipIdentifier(satellite)}<br>${orbitLabel}`
+  const lines = [labelName, mapTooltipIdentifier(satellite)]
+  if (
+    satellite.orbit.perigee_km !== null ||
+    satellite.orbit.apogee_km !== null
+  ) {
+    lines.push(
+      `${formatKm(satellite.orbit.perigee_km)} × ${formatKm(
+        satellite.orbit.apogee_km,
+      )}`,
+    )
+  }
+  return lines.join('<br>')
 }
 
 function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: string }): string {

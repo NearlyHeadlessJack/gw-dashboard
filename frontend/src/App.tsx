@@ -85,6 +85,9 @@ const LEO_TRACK_COLORS = [
 const OVERVIEW_MAP_HIGH_ORBIT_COLOR = '#ef4444'
 const OVERVIEW_MAP_DEFAULT_COLOR = '#2563eb'
 const HIGH_ORBIT_ALTITUDE_KM = 35_000
+const EARTH_RADIUS_KM = 6_371
+const COVERAGE_MIN_ELEVATION_DEG = 10
+const COVERAGE_BOUNDARY_POINT_COUNT = 180
 const EXPORT_MAP_WIDTH = 1600
 const EXPORT_MAP_HEIGHT = 900
 const EXPORT_MAP_ZOOM = 2
@@ -962,6 +965,7 @@ function OrbitSelectionMap({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const coverageLayerRef = useRef<L.LayerGroup | null>(null)
   const trackLayerRef = useRef<L.LayerGroup | null>(null)
   const markerLayerRef = useRef<L.LayerGroup | null>(null)
   const mapFittedRef = useRef(false)
@@ -1000,6 +1004,7 @@ function OrbitSelectionMap({
       .on('load', () => setMapError(null))
       .addTo(map)
 
+    coverageLayerRef.current = L.layerGroup().addTo(map)
     trackLayerRef.current = L.layerGroup().addTo(map)
     markerLayerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
@@ -1007,6 +1012,7 @@ function OrbitSelectionMap({
     return () => {
       map.remove()
       mapRef.current = null
+      coverageLayerRef.current = null
       trackLayerRef.current = null
       markerLayerRef.current = null
     }
@@ -1041,9 +1047,11 @@ function OrbitSelectionMap({
 
   useEffect(() => {
     const map = mapRef.current
+    const coverageLayer = coverageLayerRef.current
     const markerLayer = markerLayerRef.current
-    if (!map || !markerLayer) return
+    if (!map || !coverageLayer || !markerLayer) return
 
+    coverageLayer.clearLayers()
     markerLayer.clearLayers()
     const bounds = L.latLngBounds([])
     satellites.forEach((satellite, index) => {
@@ -1052,6 +1060,19 @@ function OrbitSelectionMap({
 
       const latLng = pointToLatLng(position)
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      const coverageBoundary = generateCoverageBoundary(position)
+      if (coverageBoundary.length > 2) {
+        L.polygon(coverageBoundary, {
+          color,
+          opacity: 0.38,
+          weight: 1.1,
+          fillColor: color,
+          fillOpacity: 0.13,
+          interactive: false,
+        }).addTo(coverageLayer)
+        coverageBoundary.forEach((point) => bounds.extend(point))
+      }
+
       const marker = L.circleMarker(latLng, {
         radius: 4.2,
         color: '#ffffff',
@@ -2033,6 +2054,79 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click()
   link.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function generateCoverageBoundary(point: GeoPoint): L.LatLngTuple[] {
+  if (point.altitude_km <= 0) return []
+
+  const angularRadius = coverageAngularRadiusRad(point.altitude_km)
+  if (angularRadius <= 0) return []
+
+  const centerLatitudeRad = degreesToRadians(point.latitude)
+  const centerLongitudeDeg = normalizeLongitude(point.longitude)
+  const centerLongitudeRad = degreesToRadians(centerLongitudeDeg)
+  const boundary: L.LatLngTuple[] = []
+  let previousLongitude = centerLongitudeDeg
+
+  for (let index = 0; index < COVERAGE_BOUNDARY_POINT_COUNT; index += 1) {
+    const bearing = (index / COVERAGE_BOUNDARY_POINT_COUNT) * Math.PI * 2
+    const latitudeRad = Math.asin(
+      Math.sin(centerLatitudeRad) * Math.cos(angularRadius) +
+        Math.cos(centerLatitudeRad) * Math.sin(angularRadius) * Math.cos(bearing),
+    )
+    const longitudeRad =
+      centerLongitudeRad +
+      Math.atan2(
+        Math.sin(bearing) *
+          Math.sin(angularRadius) *
+          Math.cos(centerLatitudeRad),
+        Math.cos(angularRadius) -
+          Math.sin(centerLatitudeRad) * Math.sin(latitudeRad),
+      )
+    const latitude = clampWebMercatorLatitude(radiansToDegrees(latitudeRad))
+    const normalizedLongitude = normalizeLongitude(radiansToDegrees(longitudeRad))
+    const longitude = unwrapLongitude(normalizedLongitude, previousLongitude)
+    previousLongitude = longitude
+    boundary.push([latitude, longitude])
+  }
+
+  return boundary
+}
+
+function coverageAngularRadiusRad(altitudeKm: number): number {
+  const minElevationRad = degreesToRadians(COVERAGE_MIN_ELEVATION_DEG)
+  const orbitalRadiusKm = EARTH_RADIUS_KM + altitudeKm
+  if (orbitalRadiusKm <= EARTH_RADIUS_KM) return 0
+
+  const ratio = EARTH_RADIUS_KM / orbitalRadiusKm
+  const horizonTerm = clamp(ratio * Math.cos(minElevationRad), -1, 1)
+  return Math.max(
+    0,
+    Math.PI / 2 - minElevationRad - Math.asin(horizonTerm),
+  )
+}
+
+function degreesToRadians(value: number): number {
+  return (value * Math.PI) / 180
+}
+
+function radiansToDegrees(value: number): number {
+  return (value * 180) / Math.PI
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function clampWebMercatorLatitude(value: number): number {
+  return clamp(value, -EXPORT_MERCATOR_MAX_LAT, EXPORT_MERCATOR_MAX_LAT)
+}
+
+function unwrapLongitude(longitude: number, referenceLongitude: number): number {
+  let result = longitude
+  while (result - referenceLongitude > 180) result -= 360
+  while (result - referenceLongitude < -180) result += 360
+  return result
 }
 
 function pointToLatLng(point: GeoPoint): L.LatLngTuple {

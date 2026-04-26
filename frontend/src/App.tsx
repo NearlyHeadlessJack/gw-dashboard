@@ -41,7 +41,6 @@ import type {
   LaunchPreview,
   MapSatellitePoint,
   MapPointsPayload,
-  MapPayload,
   OrbitSummary,
   RocketStat,
   SatellitePreview,
@@ -386,8 +385,8 @@ function HistoryPage() {
 function MapPage() {
   const now = useClock()
   const [refreshKey, setRefreshKey] = useState(0)
-  const { data, loading, error } = useApi<MapPayload>(
-    '/api/map/groups',
+  const { data, loading, error } = useApi<MapPointsPayload>(
+    '/api/map/satellites',
     refreshKey,
   )
 
@@ -401,8 +400,8 @@ function MapPage() {
       <SatelliteMap payload={data} now={now} />
       <div className="map-hud">
         <div className="map-hud-main">
-          <span className="hud-label">GROUP TRACKS</span>
-          <strong>{formatNumber(data?.groups.length ?? 0)}</strong>
+          <span className="hud-label">SATELLITE TRACKS</span>
+          <strong>{formatNumber(data?.satellites.length ?? 0)}</strong>
         </div>
         <div className="hud-meta">
           <Clock size={14} />
@@ -423,7 +422,13 @@ function MapPage() {
   )
 }
 
-function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date }) {
+function SatelliteMap({
+  payload,
+  now,
+}: {
+  payload: MapPointsPayload | null
+  now: Date
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const trackLayerRef = useRef<L.LayerGroup | null>(null)
@@ -432,8 +437,11 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
   const [mapError, setMapError] = useState<string | null>(null)
   const trackMinute = Math.floor(now.getTime() / 60_000)
   const tleKey =
-    payload?.groups
-      .map((group) => `${group.id}:${group.raw_tle}`)
+    payload?.satellites
+      .map(
+        (satellite) =>
+          `${satellite.id ?? satellite.intl_designator}:${satellite.raw_tle}`,
+      )
       .join('|') ?? ''
 
   useEffect(() => {
@@ -486,9 +494,9 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
 
     trackLayer.clearLayers()
     const trackMoment = new Date(trackMinute * 60_000)
-    payload.groups.forEach((group, index) => {
+    payload.satellites.forEach((satellite, index) => {
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
-      const track = generatePreviousOrbitTrack(group.raw_tle, trackMoment)
+      const track = generatePreviousOrbitTrack(satellite.raw_tle, trackMoment)
       splitTrackByDateline(track).forEach((segment) => {
         L.polyline(segment, {
           color,
@@ -507,8 +515,8 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
 
     markerLayer.clearLayers()
     const bounds = L.latLngBounds([])
-    payload.groups.forEach((group, index) => {
-      const position = propagateTlePosition(group.raw_tle, now)
+    payload.satellites.forEach((satellite, index) => {
+      const position = propagateTlePosition(satellite.raw_tle, now)
       if (!position) return
 
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
@@ -519,8 +527,12 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
         fillColor: color,
         fillOpacity: 0.96,
       }).addTo(markerLayer)
+      const labelName = satellite.group_name ?? satellite.group_intl_designator ?? '-'
+      const orbitLabel = `${formatKm(satellite.orbit.perigee_km)} × ${formatKm(
+        satellite.orbit.apogee_km,
+      )}`
       marker.bindTooltip(
-        `${group.name ?? group.intl_designator}<br>${mapTooltipIdentifier(group)}<br>${formatKm(group.orbit.perigee_km)} × ${formatKm(group.orbit.apogee_km)}`,
+        `${labelName}<br>${mapTooltipIdentifier(satellite)}<br>${orbitLabel}`,
         { direction: 'top', offset: [0, -8] },
       )
       bounds.extend(pointToLatLng(position))

@@ -216,7 +216,7 @@ def create_app(
     def map_satellites(
         at: str | None = Query(default=None, description="ISO-8601 UTC time"),
     ) -> Any:
-        return map_groups(at)
+        return map_points(at)
 
     _mount_frontend(app, app_config)
     return app

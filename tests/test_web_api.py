@@ -328,6 +328,17 @@ def test_map_points_api_returns_satellite_tle_for_frontend_propagation(client):
     assert "track" not in first
 
 
+def test_map_satellites_api_returns_satellite_tle_for_frontend_propagation(client):
+    response = client.get("/api/map/satellites?at=2026-04-26T08:00:00Z")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["generated_at"] == "2026-04-26T08:00:00Z"
+    assert payload["skipped_satellites"] == 0
+    assert len(payload["satellites"]) == 2
+    assert payload["satellites"][0]["intl_designator"] == "2024-240A"
+
+
 def test_map_groups_api_marks_geo_groups():
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()

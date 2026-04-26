@@ -1353,11 +1353,20 @@ function EmptyState({
 function App() {
   const now = useClock()
   const [noticeDismissed, setNoticeDismissed] = useState(false)
+  const [noticeClosing, setNoticeClosing] = useState(false)
   return (
     <BrowserRouter>
       <div className={`app ${noticeDismissed ? 'notice-hidden' : 'notice-visible'}`}>
         {!noticeDismissed && (
-          <div className="public-data-notice" role="status">
+          <div
+            className={`public-data-notice${noticeClosing ? ' closing' : ''}`}
+            role="status"
+            onAnimationEnd={() => {
+              if (noticeClosing) {
+                setNoticeDismissed(true)
+              }
+            }}
+          >
             <span>数据均来自公开信息，仅供学习参考。</span>
             <a
               href="https://github.com/NearlyHeadlessJack/gw-dashboard"
@@ -1377,7 +1386,8 @@ function App() {
             <button
               className="notice-close"
               type="button"
-              onClick={() => setNoticeDismissed(true)}
+              onClick={() => setNoticeClosing(true)}
+              disabled={noticeClosing}
               aria-label="关闭通知"
               title="关闭通知"
             >

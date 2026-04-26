@@ -132,6 +132,50 @@ def build_map_satellites(
     }
 
 
+def build_map_points(
+    database: DatabaseManager,
+    *,
+    at: datetime | None = None,
+    position_factory: Callable[..., Row] = propagate_tle_position,
+) -> Row:
+    """返回总览地图需要的单星当前位置点。"""
+    moment = _as_utc(at)
+    satellites: list[Row] = []
+    skipped = 0
+
+    for satellite in list_current_satellites(database):
+        raw_tle = satellite.get("raw_tle")
+        if not raw_tle:
+            skipped += 1
+            continue
+        try:
+            position = position_factory(str(raw_tle), moment)
+        except OrbitPropagationError:
+            skipped += 1
+            continue
+
+        orbit = _orbit(satellite)
+        satellites.append(
+            {
+                "id": satellite.get("id"),
+                "intl_designator": satellite.get("intl_designator"),
+                "status": satellite.get("status") or "有效",
+                "group_id": satellite.get("group_id"),
+                "group_name": satellite.get("group_name"),
+                "group_intl_designator": satellite.get("group_intl_designator"),
+                "orbit": orbit,
+                "orbit_type": _orbit_type(orbit),
+                "position": position,
+            }
+        )
+
+    return {
+        "generated_at": moment.isoformat().replace("+00:00", "Z"),
+        "satellites": satellites,
+        "skipped_satellites": skipped,
+    }
+
+
 def list_current_satellites(
     database: DatabaseManager,
     groups: list[Row] | None = None,

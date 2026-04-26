@@ -20,6 +20,7 @@ from gw.database import DatabaseConfigurationError, DatabaseManager, DatabaseQue
 from gw.utils.update_database import update_satellite_database
 from gw.web.api import (
     build_dashboard,
+    build_map_points,
     build_map_satellites,
     get_group_detail,
     get_satellite_detail,
@@ -174,6 +175,19 @@ def create_app(
             app,
             cache_key,
             lambda: build_map_satellites(db, at=moment),
+            ttl_override=min(app_config.backend.cache_ttl_seconds, 10),
+        )
+
+    @app.get("/api/map/points")
+    def map_points(
+        at: str | None = Query(default=None, description="ISO-8601 UTC time"),
+    ) -> Any:
+        moment = _parse_time_query(at)
+        cache_key = f"map:points:{moment.isoformat(timespec='seconds')}"
+        return _cached(
+            app,
+            cache_key,
+            lambda: build_map_points(db, at=moment),
             ttl_override=min(app_config.backend.cache_ttl_seconds, 10),
         )
 

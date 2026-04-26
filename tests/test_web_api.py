@@ -271,6 +271,21 @@ def test_map_groups_api_returns_group_positions_and_previous_orbit_tracks(client
     assert first["track"][-1]["timestamp"] == "2026-04-26T08:00:00Z"
 
 
+def test_map_points_api_returns_satellite_positions_without_tracks(client):
+    response = client.get("/api/map/points?at=2026-04-26T08:00:00Z")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["generated_at"] == "2026-04-26T08:00:00Z"
+    assert len(payload["satellites"]) == 2
+    first = payload["satellites"][0]
+    assert first["intl_designator"] == "2024-240A"
+    assert first["group_name"] == "低轨01组"
+    assert "track" not in first
+    assert -90 <= first["position"]["latitude"] <= 90
+    assert -180 <= first["position"]["longitude"] <= 180
+
+
 def test_map_groups_api_marks_geo_groups():
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()

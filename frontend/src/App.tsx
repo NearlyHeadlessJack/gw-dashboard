@@ -36,6 +36,7 @@ import type {
   GroupSummary,
   HistoryPoint,
   LaunchPreview,
+  MapPointsPayload,
   MapPayload,
   OrbitSummary,
   RocketStat,
@@ -134,6 +135,11 @@ function OverviewPage() {
     loading: launchesLoading,
     error: launchesError,
   } = useApi<LaunchPreview[]>('/api/launches')
+  const {
+    data: mapPoints,
+    loading: mapLoading,
+    error: mapError,
+  } = useApi<MapPointsPayload>('/api/map/points')
 
   if (loading || satellitesLoading || launchesLoading) {
     return <LoadingState label="仪表盘同步中" />
@@ -176,6 +182,22 @@ function OverviewPage() {
       </section>
 
       <div className="dashboard-grid">
+        <Panel
+          className="span-12"
+          title="地图"
+          icon={Map}
+          meta={
+            mapPoints
+              ? `${formatNumber(mapPoints.satellites.length)} 颗`
+              : undefined
+          }
+        >
+          <div className="overview-map-shell">
+            <OverviewPointMap payload={mapPoints} />
+            {mapLoading && <div className="overview-map-state">地图同步中</div>}
+            {mapError && <div className="overview-map-state error">{mapError}</div>}
+          </div>
+        </Panel>
         <Panel
           className="span-7"
           title="最近发射卫星"
@@ -472,6 +494,82 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
     } else {
       map.setView([25, 105], 2)
     }
+  }, [payload])
+
+  return (
+    <>
+      <div ref={containerRef} className="tile-map-container" />
+      {mapError && <div className="map-error-note">{mapError}</div>}
+    </>
+  )
+}
+
+function OverviewPointMap({ payload }: { payload: MapPointsPayload | null }) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<L.Map | null>(null)
+  const overlayLayerRef = useRef<L.LayerGroup | null>(null)
+  const [mapError, setMapError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) {
+      return
+    }
+
+    const map = L.map(containerRef.current, {
+      center: [25, 105],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 2,
+      worldCopyJump: true,
+      zoomControl: false,
+      dragging: false,
+      touchZoom: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+    })
+
+    L.tileLayer(GAODE_STANDARD_TILE_URL, {
+      subdomains: ['1', '2', '3', '4'],
+      minZoom: 2,
+      maxZoom: 2,
+      attribution: '© 高德地图',
+    })
+      .on('tileerror', () => setMapError('高德标准瓦片加载失败'))
+      .on('load', () => setMapError(null))
+      .addTo(map)
+
+    const overlayLayer = L.layerGroup().addTo(map)
+    mapRef.current = map
+    overlayLayerRef.current = overlayLayer
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+      overlayLayerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const overlayLayer = overlayLayerRef.current
+    if (!overlayLayer || !payload) return
+
+    overlayLayer.clearLayers()
+    payload.satellites.forEach((satellite, index) => {
+      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      const marker = L.circleMarker(pointToLatLng(satellite.position), {
+        radius: 3.6,
+        color: '#ffffff',
+        weight: 1.2,
+        fillColor: color,
+        fillOpacity: 0.95,
+      }).addTo(overlayLayer)
+      marker.bindTooltip(
+        `${satellite.group_name ?? satellite.group_intl_designator ?? '-'}<br>${mapTooltipIdentifier(satellite)}<br>${formatKm(satellite.orbit.perigee_km)} × ${formatKm(satellite.orbit.apogee_km)}`,
+        { direction: 'top', offset: [0, -7] },
+      )
+    })
   }, [payload])
 
   return (

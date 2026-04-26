@@ -114,8 +114,26 @@ export type MapGroupTrack = {
   track: GeoPoint[]
 }
 
+export type MapSatellitePoint = {
+  id: number | null
+  intl_designator: string
+  status: string
+  group_id: number | null
+  group_name: string | null
+  group_intl_designator: string | null
+  orbit: OrbitSummary
+  orbit_type: 'leo' | 'sso' | 'geo'
+  position: GeoPoint
+}
+
 export type MapPayload = {
   generated_at: string
   groups: MapGroupTrack[]
   skipped_groups: number
+}
+
+export type MapPointsPayload = {
+  generated_at: string
+  satellites: MapSatellitePoint[]
+  skipped_satellites: number
 }

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+} from 'react'
 import {
   BrowserRouter,
   Link,
@@ -400,7 +407,7 @@ function MapPage() {
       <SatelliteMap payload={data} now={now} />
       <div className="map-hud">
         <div className="map-hud-main">
-          <span className="hud-label">SATELLITE TRACKS</span>
+          <span className="hud-label">SATELLITES</span>
           <strong>{formatNumber(data?.satellites.length ?? 0)}</strong>
         </div>
         <div className="hud-meta">
@@ -433,8 +440,18 @@ function SatelliteMap({
   const mapRef = useRef<L.Map | null>(null)
   const trackLayerRef = useRef<L.LayerGroup | null>(null)
   const markerLayerRef = useRef<L.LayerGroup | null>(null)
+  const markersRef = useRef<globalThis.Map<string, L.CircleMarker>>(
+    new globalThis.Map(),
+  )
+  const satelliteByKeyRef = useRef<
+    globalThis.Map<string, MapSatellitePoint>
+  >(new globalThis.Map())
+  const hoverClearTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
+    null,
+  )
   const mapFittedRef = useRef(false)
   const [mapError, setMapError] = useState<string | null>(null)
+  const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null)
   const trackMinute = Math.floor(now.getTime() / 60_000)
   const tleKey =
     payload?.satellites
@@ -443,6 +460,30 @@ function SatelliteMap({
           `${satellite.id ?? satellite.intl_designator}:${satellite.raw_tle}`,
       )
       .join('|') ?? ''
+
+  const clearHoverTimer = useCallback(() => {
+    if (hoverClearTimerRef.current !== null) {
+      window.clearTimeout(hoverClearTimerRef.current)
+      hoverClearTimerRef.current = null
+    }
+  }, [])
+
+  const activateSatelliteGroup = useCallback(
+    (satellite: MapSatellitePoint) => {
+      clearHoverTimer()
+      const groupKey = satelliteGroupKey(satellite)
+      setActiveGroupKey(groupKey)
+    },
+    [clearHoverTimer],
+  )
+
+  const scheduleDeactivateSatelliteGroup = useCallback(() => {
+    clearHoverTimer()
+    hoverClearTimerRef.current = window.setTimeout(() => {
+      setActiveGroupKey(null)
+      hoverClearTimerRef.current = null
+    }, 120)
+  }, [clearHoverTimer])
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -472,17 +513,22 @@ function SatelliteMap({
 
     const trackLayer = L.layerGroup().addTo(map)
     const markerLayer = L.layerGroup().addTo(map)
+    const markerStore = markersRef.current
+    const satelliteStore = satelliteByKeyRef.current
     mapRef.current = map
     trackLayerRef.current = trackLayer
     markerLayerRef.current = markerLayer
 
     return () => {
+      clearHoverTimer()
       map.remove()
+      markerStore.clear()
+      satelliteStore.clear()
       mapRef.current = null
       trackLayerRef.current = null
       markerLayerRef.current = null
     }
-  }, [])
+  }, [clearHoverTimer])
 
   useEffect(() => {
     mapFittedRef.current = false
@@ -490,11 +536,15 @@ function SatelliteMap({
 
   useEffect(() => {
     const trackLayer = trackLayerRef.current
-    if (!trackLayer || !payload) return
+    if (!trackLayer) return
 
     trackLayer.clearLayers()
+    if (!payload || !activeGroupKey) return
+
     const trackMoment = new Date(trackMinute * 60_000)
     payload.satellites.forEach((satellite, index) => {
+      if (satelliteGroupKey(satellite) !== activeGroupKey) return
+
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
       const track = generatePreviousOrbitTrack(satellite.raw_tle, trackMoment)
       splitTrackByDateline(track).forEach((segment) => {
@@ -503,39 +553,78 @@ function SatelliteMap({
           opacity: 0.72,
           weight: 1.8,
           lineJoin: 'round',
+          interactive: false,
         }).addTo(trackLayer)
       })
     })
-  }, [payload, trackMinute])
+  }, [activeGroupKey, payload, trackMinute])
 
   useEffect(() => {
     const map = mapRef.current
     const markerLayer = markerLayerRef.current
     if (!map || !markerLayer || !payload) return
 
-    markerLayer.clearLayers()
     const bounds = L.latLngBounds([])
+    const visibleKeys = new Set<string>()
+    satelliteByKeyRef.current.clear()
+
     payload.satellites.forEach((satellite, index) => {
+      const key = satelliteMarkerKey(satellite)
+      satelliteByKeyRef.current.set(key, satellite)
       const position = propagateTlePosition(satellite.raw_tle, now)
       if (!position) return
 
+      visibleKeys.add(key)
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
-      const marker = L.circleMarker(pointToLatLng(position), {
-        radius: 4,
+      const latLng = pointToLatLng(position)
+      let marker = markersRef.current.get(key)
+      if (!marker) {
+        marker = L.circleMarker(latLng, {
+          radius: 4,
+          color: '#ffffff',
+          weight: 1.3,
+          fillColor: color,
+          fillOpacity: 0.96,
+        }).addTo(markerLayer)
+        marker.bindTooltip(satelliteMapTooltip(satellite), {
+          direction: 'top',
+          offset: [0, -8],
+        })
+        marker.on('mouseover', () => {
+          const currentSatellite = satelliteByKeyRef.current.get(key)
+          if (currentSatellite) {
+            activateSatelliteGroup(currentSatellite)
+          }
+        })
+        marker.on('mouseout', scheduleDeactivateSatelliteGroup)
+        markersRef.current.set(key, marker)
+      } else {
+        marker.setLatLng(latLng)
+        marker.setTooltipContent(satelliteMapTooltip(satellite))
+      }
+
+      const isActiveGroup =
+        activeGroupKey !== null && satelliteGroupKey(satellite) === activeGroupKey
+      marker.setRadius(isActiveGroup ? 4.8 : 4)
+      marker.setStyle({
         color: '#ffffff',
-        weight: 1.3,
+        weight: isActiveGroup ? 1.8 : 1.3,
         fillColor: color,
-        fillOpacity: 0.96,
-      }).addTo(markerLayer)
-      const labelName = satellite.group_name ?? satellite.group_intl_designator ?? '-'
-      const orbitLabel = `${formatKm(satellite.orbit.perigee_km)} × ${formatKm(
-        satellite.orbit.apogee_km,
-      )}`
-      marker.bindTooltip(
-        `${labelName}<br>${mapTooltipIdentifier(satellite)}<br>${orbitLabel}`,
-        { direction: 'top', offset: [0, -8] },
-      )
-      bounds.extend(pointToLatLng(position))
+        fillOpacity: isActiveGroup ? 1 : 0.96,
+      })
+      if (isActiveGroup) {
+        marker.openTooltip()
+      } else {
+        marker.closeTooltip()
+      }
+      bounds.extend(latLng)
+    })
+
+    markersRef.current.forEach((marker, key) => {
+      if (!visibleKeys.has(key)) {
+        marker.remove()
+        markersRef.current.delete(key)
+      }
     })
 
     if (bounds.isValid()) {
@@ -546,7 +635,13 @@ function SatelliteMap({
     } else {
       map.setView([25, 105], 2)
     }
-  }, [payload, now])
+  }, [
+    activateSatelliteGroup,
+    activeGroupKey,
+    now,
+    payload,
+    scheduleDeactivateSatelliteGroup,
+  ])
 
   return (
     <>
@@ -1451,6 +1546,25 @@ function orbitSentence(orbit: OrbitSummary): string {
   return `${formatDegree(orbit.inclination_deg)} / ${formatKm(
     orbit.perigee_km,
   )} - ${formatKm(orbit.apogee_km)}`
+}
+
+function satelliteMarkerKey(satellite: MapSatellitePoint): string {
+  return satellite.intl_designator
+}
+
+function satelliteGroupKey(satellite: MapSatellitePoint): string {
+  if (satellite.group_intl_designator) return satellite.group_intl_designator
+  if (satellite.group_id !== null) return `group:${satellite.group_id}`
+  if (satellite.group_name) return `group:${satellite.group_name}`
+  return `satellite:${satellite.intl_designator}`
+}
+
+function satelliteMapTooltip(satellite: MapSatellitePoint): string {
+  const labelName = satellite.group_name ?? satellite.group_intl_designator ?? '-'
+  const orbitLabel = `${formatKm(satellite.orbit.perigee_km)} × ${formatKm(
+    satellite.orbit.apogee_km,
+  )}`
+  return `${labelName}<br>${mapTooltipIdentifier(satellite)}<br>${orbitLabel}`
 }
 
 function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: string }): string {

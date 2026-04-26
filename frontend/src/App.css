@@ -722,61 +722,48 @@ tbody tr:hover td {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: #05080f;
+  background: #dbe8f4;
 }
 
-.amap-container,
-.fallback-map {
+.tile-map-container {
   position: absolute;
   inset: 0;
 }
 
-.fallback-map {
-  display: block;
-  background:
-    linear-gradient(180deg, rgba(5, 8, 15, 0.12), rgba(5, 8, 15, 0.86)),
-    radial-gradient(circle at 50% 50%, rgba(52, 211, 235, 0.12), transparent 46%),
-    #060a12;
+.tile-map-container .leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #dbe8f4;
+  font: inherit;
 }
 
-.fallback-grid {
+.tile-map-container .leaflet-control-attribution {
+  color: #41526a;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.tile-map-container .leaflet-control-zoom a {
+  color: #1d2a3d;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(80, 99, 127, 0.22);
+}
+
+.tile-map-container .leaflet-tooltip {
+  color: #172033;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(80, 99, 127, 0.22);
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
+}
+
+.map-error-note {
   position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(73, 96, 137, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(73, 96, 137, 0.18) 1px, transparent 1px);
-  background-size: 7.5% 12.5%;
-}
-
-.fallback-satellite {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 14px currentColor;
-}
-
-.fallback-satellite.valid {
-  color: var(--success);
-  background: var(--success);
-}
-
-.fallback-satellite.invalid {
-  color: var(--danger);
-  background: var(--danger);
-}
-
-.fallback-message {
-  position: absolute;
-  left: 18px;
+  right: 18px;
   bottom: 18px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  z-index: 1100;
   max-width: min(420px, calc(100% - 36px));
-  padding: 10px 12px;
-  color: var(--text-primary);
+  padding: 9px 11px;
+  color: var(--danger);
   background: rgba(8, 13, 23, 0.82);
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -787,7 +774,7 @@ tbody tr:hover td {
   position: absolute;
   top: 18px;
   left: 18px;
-  z-index: 5;
+  z-index: 1100;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -851,7 +838,7 @@ tbody tr:hover td {
   position: absolute;
   right: 18px;
   bottom: 18px;
-  z-index: 5;
+  z-index: 1100;
   padding: 9px 11px;
   color: var(--text-secondary);
   background: rgba(8, 13, 23, 0.84);
@@ -862,25 +849,6 @@ tbody tr:hover td {
 
 .map-state.error {
   color: var(--danger);
-}
-
-.sat-marker {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 14px currentColor;
-}
-
-.sat-marker.valid {
-  color: #19d89f;
-  background: #19d89f;
-}
-
-.sat-marker.invalid {
-  color: #ff5a68;
-  background: #ff5a68;
 }
 
 ::-webkit-scrollbar {

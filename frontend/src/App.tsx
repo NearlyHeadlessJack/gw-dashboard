@@ -6,7 +6,8 @@ import {
   Route,
   Routes,
 } from 'react-router-dom'
-import { load as loadAMap } from '@amap/amap-jsapi-loader'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import {
   Activity,
   AlertCircle,
@@ -19,7 +20,6 @@ import {
   LayoutDashboard,
   ListTree,
   Map,
-  MapPinned,
   Orbit,
   RadioTower,
   RefreshCw,
@@ -43,14 +43,6 @@ import type {
 } from './types'
 import './App.css'
 
-declare global {
-  interface Window {
-    _AMapSecurityConfig?: {
-      securityJsCode: string
-    }
-  }
-}
-
 type IconComponent = typeof LayoutDashboard
 
 type MenuItem = {
@@ -59,28 +51,8 @@ type MenuItem = {
   icon: IconComponent
 }
 
-type AMapOverlay = {
-  setMap?: (map: AMapMap | null) => void
-}
-
-type AMapMap = {
-  add: (overlay: AMapOverlay | AMapOverlay[]) => void
-  clearMap: () => void
-  destroy: () => void
-  setFitView: (
-    overlays?: AMapOverlay[],
-    immediately?: boolean,
-    avoid?: number[],
-    maxZoom?: number,
-  ) => void
-}
-
-type AMapApi = {
-  Map: new (container: HTMLDivElement, options: object) => AMapMap
-  Marker: new (options: object) => AMapOverlay
-  Polyline: new (options: object) => AMapOverlay
-  Pixel: new (x: number, y: number) => object
-}
+const GAODE_STANDARD_TILE_URL =
+  'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}'
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -377,128 +349,91 @@ function MapPage() {
 
 function SatelliteMap({ payload }: { payload: MapPayload | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<AMapMap | null>(null)
-  const amapRef = useRef<AMapApi | null>(null)
+  const mapRef = useRef<L.Map | null>(null)
+  const overlayLayerRef = useRef<L.LayerGroup | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
-  const amapKey = import.meta.env.VITE_AMAP_KEY
-  const securityCode = import.meta.env.VITE_AMAP_SECURITY_JS_CODE
 
   useEffect(() => {
-    if (!containerRef.current || !amapKey) {
-      setMapError(amapKey ? null : 'AMap Key 未配置')
+    if (!containerRef.current) {
       return
     }
 
-    let cancelled = false
-    if (securityCode) {
-      window._AMapSecurityConfig = { securityJsCode: securityCode }
-    }
-
-    loadAMap({
-      key: amapKey,
-      version: '2.0',
-      plugins: ['AMap.Scale'],
+    const map = L.map(containerRef.current, {
+      center: [25, 105],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 10,
+      worldCopyJump: true,
+      zoomControl: false,
     })
-      .then((AMapValue: unknown) => {
-        if (cancelled || !containerRef.current) return
-        const AMap = AMapValue as AMapApi
-        amapRef.current = AMap
-        mapRef.current = new AMap.Map(containerRef.current, {
-          center: [105, 25],
-          zoom: 2,
-          viewMode: '3D',
-          pitch: 18,
-          mapStyle: 'amap://styles/darkblue',
-        })
-        setMapError(null)
-      })
-      .catch(() => {
-        if (!cancelled) setMapError('高德地图加载失败')
-      })
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map)
+    L.tileLayer(GAODE_STANDARD_TILE_URL, {
+      subdomains: ['1', '2', '3', '4'],
+      minZoom: 2,
+      maxZoom: 10,
+      attribution: '© 高德地图',
+    })
+      .on('tileerror', () => setMapError('高德标准瓦片加载失败'))
+      .on('load', () => setMapError(null))
+      .addTo(map)
+
+    const overlayLayer = L.layerGroup().addTo(map)
+    mapRef.current = map
+    overlayLayerRef.current = overlayLayer
 
     return () => {
-      cancelled = true
-      mapRef.current?.destroy()
+      map.remove()
       mapRef.current = null
-      amapRef.current = null
+      overlayLayerRef.current = null
     }
-  }, [amapKey, securityCode])
+  }, [])
 
   useEffect(() => {
     const map = mapRef.current
-    const AMap = amapRef.current
-    if (!map || !AMap || !payload) return
+    const overlayLayer = overlayLayerRef.current
+    if (!map || !overlayLayer || !payload) return
 
-    map.clearMap()
-    const overlays: AMapOverlay[] = []
+    overlayLayer.clearLayers()
+    const bounds = L.latLngBounds([])
+
     payload.satellites.forEach((satellite) => {
-      const path = satellite.track.map(pointToLngLat)
-      if (path.length > 1) {
-        overlays.push(
-          new AMap.Polyline({
-            path,
-            strokeColor: satellite.status === '有效' ? '#19d89f' : '#ff5a68',
-            strokeOpacity: 0.72,
-            strokeWeight: 2,
-            lineJoin: 'round',
-            zIndex: 24,
-          }),
-        )
-      }
-      overlays.push(
-        new AMap.Marker({
-          position: pointToLngLat(satellite.position),
-          content: `<span class="sat-marker ${
-            satellite.status === '有效' ? 'valid' : 'invalid'
-          }"></span>`,
-          offset: new AMap.Pixel(-6, -6),
-          title: satellite.intl_designator,
-          zIndex: 40,
-        }),
+      const color = satellite.status === '有效' ? '#19d89f' : '#ff5a68'
+      splitTrackByDateline(satellite.track).forEach((segment) => {
+        L.polyline(segment, {
+          color,
+          opacity: 0.78,
+          weight: 2.5,
+          lineJoin: 'round',
+        }).addTo(overlayLayer)
+      })
+
+      const marker = L.circleMarker(pointToLatLng(satellite.position), {
+        radius: 5,
+        color: '#ffffff',
+        weight: 1.5,
+        fillColor: color,
+        fillOpacity: 0.96,
+      }).addTo(overlayLayer)
+      marker.bindTooltip(
+        `${satellite.intl_designator} · ${satellite.group_name ?? '-'}`,
+        { direction: 'top', offset: [0, -8] },
       )
+      bounds.extend(pointToLatLng(satellite.position))
     })
-    if (overlays.length > 0) {
-      map.add(overlays)
-      map.setFitView(overlays, false, [80, 80, 80, 80], 3)
+
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 3 })
+    } else {
+      map.setView([25, 105], 2)
     }
   }, [payload])
 
   return (
     <>
-      <div ref={containerRef} className="amap-container" />
-      {mapError && <FallbackWorldMap payload={payload} message={mapError} />}
+      <div ref={containerRef} className="tile-map-container" />
+      {mapError && <div className="map-error-note">{mapError}</div>}
     </>
-  )
-}
-
-function FallbackWorldMap({
-  payload,
-  message,
-}: {
-  payload: MapPayload | null
-  message: string
-}) {
-  return (
-    <div className="fallback-map">
-      <div className="fallback-grid" />
-      {payload?.satellites.map((satellite) => (
-        <span
-          key={satellite.intl_designator}
-          className={`fallback-satellite ${
-            satellite.status === '有效' ? 'valid' : 'invalid'
-          }`}
-          style={{
-            left: `${((satellite.position.longitude + 180) / 360) * 100}%`,
-            top: `${((90 - satellite.position.latitude) / 180) * 100}%`,
-          }}
-          title={satellite.intl_designator}
-        />
-      ))}
-      <div className="fallback-message">
-        <MapPinned size={18} />
-        <span>{message}</span>
-      </div>
-    </div>
   )
 }
 
@@ -1034,8 +969,33 @@ function App() {
   )
 }
 
-function pointToLngLat(point: GeoPoint): [number, number] {
-  return [point.longitude, point.latitude]
+function pointToLatLng(point: GeoPoint): L.LatLngTuple {
+  return [point.latitude, point.longitude]
+}
+
+function splitTrackByDateline(track: GeoPoint[]): L.LatLngTuple[][] {
+  const segments: L.LatLngTuple[][] = []
+  let currentSegment: L.LatLngTuple[] = []
+  let previousLongitude: number | null = null
+
+  track.forEach((point) => {
+    if (
+      previousLongitude !== null &&
+      Math.abs(point.longitude - previousLongitude) > 180
+    ) {
+      if (currentSegment.length > 1) {
+        segments.push(currentSegment)
+      }
+      currentSegment = []
+    }
+    currentSegment.push(pointToLatLng(point))
+    previousLongitude = point.longitude
+  })
+
+  if (currentSegment.length > 1) {
+    segments.push(currentSegment)
+  }
+  return segments
 }
 
 function formatNumber(value: number | null | undefined): string {

@@ -359,17 +359,26 @@ function OrbitExplorerPage() {
   const { data: groups, loading, error } = useApi<GroupSummary[]>('/api/groups')
   const [searchParams, setSearchParams] = useSearchParams()
   const [satelliteIntl, setSatelliteIntl] = useState('')
+  const sortedGroups = useMemo(
+    () => sortByOrbitDistance(groups ?? []),
+    [groups],
+  )
   const requestedGroupIntl = searchParams.get('group') || ''
-  const selectedGroupIntl = requestedGroupIntl || groups?.[0]?.intl_designator || ''
+  const selectedGroupIntl =
+    requestedGroupIntl || sortedGroups[0]?.intl_designator || ''
 
   const detailPath = selectedGroupIntl ? `/api/groups/${selectedGroupIntl}` : null
   const { data: detail, loading: detailLoading } = useApi<GroupDetail>(detailPath)
+  const sortedSatellites = useMemo(
+    () => sortByOrbitDistance(detail?.satellites ?? []),
+    [detail?.satellites],
+  )
   const selectedSatellite = useMemo(
     () =>
-      detail?.satellites.find(
+      sortedSatellites.find(
         (satellite) => satellite.intl_designator === satelliteIntl,
       ) ?? null,
-    [detail, satelliteIntl],
+    [satelliteIntl, sortedSatellites],
   )
 
   if (loading) return <LoadingState label="星组索引同步中" />
@@ -379,10 +388,10 @@ function OrbitExplorerPage() {
   return (
     <div className="page-stack">
       <SelectorPanel
-        groups={groups}
+        groups={sortedGroups}
         selectedGroup={selectedGroupIntl}
         selectedSatellite={selectedSatellite?.intl_designator ?? ''}
-        satellites={detail?.satellites ?? []}
+        satellites={sortedSatellites}
         onGroupChange={(value) => {
           setSearchParams(value ? { group: value } : {})
           setSatelliteIntl('')
@@ -2098,6 +2107,29 @@ function orbitSentence(orbit: OrbitSummary): string {
   return `${formatDegree(orbit.inclination_deg)} / ${formatKm(
     orbit.perigee_km,
   )} - ${formatKm(orbit.apogee_km)}`
+}
+
+function sortByOrbitDistance<
+  T extends { intl_designator: string; orbit: OrbitSummary },
+>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort((left, right) => {
+    const distanceDelta =
+      orbitDistanceSortValue(left.orbit) - orbitDistanceSortValue(right.orbit)
+    if (distanceDelta !== 0) return distanceDelta
+    return left.intl_designator.localeCompare(right.intl_designator)
+  })
+}
+
+function orbitDistanceSortValue(orbit: OrbitSummary): number {
+  const { perigee_km: perigee, apogee_km: apogee } = orbit
+  if (perigee !== null && apogee !== null) {
+    return (perigee + apogee) / 2
+  }
+  if (perigee !== null) return perigee
+  if (apogee !== null) return apogee
+  return Number.POSITIVE_INFINITY
 }
 
 function satellitePreviewToMapPoint(

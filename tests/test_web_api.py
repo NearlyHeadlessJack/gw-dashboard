@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 import pytest
@@ -364,3 +365,21 @@ def test_backend_serves_frontend_dist_as_single_process_app(tmp_path):
     assert frontend_client.get("/map").text == "<main>GW Dashboard</main>"
     assert frontend_client.get("/assets/app.js").text == "console.log('gw')"
     assert frontend_client.get("/api/not-found").status_code == 404
+
+
+def test_backend_logs_frontend_entry_when_lifespan_starts(caplog):
+    db = DatabaseManager("sqlite3", ":memory:")
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(host="0.0.0.0", port=8123, cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+
+    with caplog.at_level(logging.INFO, logger="gw.web.app"):
+        with TestClient(create_app(config, database=db, start_daemon=False)):
+            pass
+
+    assert (
+        "web service started: frontend entry URL: http://127.0.0.1:8123"
+        in caplog.text
+    )

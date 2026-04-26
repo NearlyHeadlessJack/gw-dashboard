@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Sequence
 
 import uvicorn
 
 from gw.config import AppConfig, load_config
 from gw.web.app import create_app
+from gw.web.runtime import database_connection_for_log, log_frontend_entry
+
+
+STARTUP_FAILURE = 3
 
 
 def configure_console_logging() -> None:
@@ -20,40 +25,58 @@ def configure_console_logging() -> None:
     )
 
 
-def frontend_entry_url(config: AppConfig) -> str:
-    """返回用户浏览器应打开的前端入口 URL。"""
-    host = config.backend.host.strip() or "127.0.0.1"
-    if host in {"0.0.0.0", "::"}:
-        host = "127.0.0.1"
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    return f"http://{host}:{config.backend.port}"
+class FrontendEntryServer(uvicorn.Server):
+    """Uvicorn server that prints the frontend URL after sockets are listening."""
+
+    def __init__(
+        self,
+        config: uvicorn.Config,
+        *,
+        on_started: Callable[[], None],
+    ) -> None:
+        super().__init__(config=config)
+        self._on_started = on_started
+        self._notified_started = False
+
+    async def startup(self, sockets=None) -> None:
+        await super().startup(sockets=sockets)
+        if self.started and not self._notified_started:
+            self._notified_started = True
+            self._on_started()
 
 
-def terminal_hyperlink(url: str, label: str | None = None) -> str:
-    """生成支持 OSC 8 的终端超链接文本。"""
-    text = label or url
-    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+def run_web_server(config: AppConfig, logger: logging.Logger) -> None:
+    server_config = uvicorn.Config(
+        create_app(config, log_frontend_on_startup=False),
+        host=config.backend.host,
+        port=config.backend.port,
+        reload=config.backend.reload,
+        log_config=None,
+    )
 
+    if server_config.reload and not isinstance(server_config.app, str):
+        logging.getLogger("uvicorn.error").warning(
+            "You must pass the application as an import string to enable 'reload'."
+        )
+        raise SystemExit(1)
 
-def database_connection_for_log(connection: object) -> object:
-    """返回适合日志输出的数据库连接信息，避免泄露密码。"""
-    if isinstance(connection, dict):
-        return {
-            key: ("***" if "password" in str(key).lower() else value)
-            for key, value in connection.items()
-        }
-    connection_text = str(connection)
-    if "://" in connection_text and "@" in connection_text:
-        return "<configured sqlalchemy url>"
-    return connection_text
+    server = FrontendEntryServer(
+        server_config,
+        on_started=lambda: log_frontend_entry(logger, config),
+    )
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        pass
+
+    if not server.started:
+        raise SystemExit(STARTUP_FAILURE)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     configure_console_logging()
     config = load_config(argv)
     logger = logging.getLogger(__name__)
-    frontend_url = frontend_entry_url(config)
     logger.info(
         "gw-dashboard starting: host=%s port=%s reload=%s frontend_dist=%s",
         config.backend.host,
@@ -66,18 +89,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         config.database.type,
         database_connection_for_log(config.database.connection),
     )
-    logger.info(
-        "frontend entry URL: %s (%s)",
-        frontend_url,
-        terminal_hyperlink(frontend_url, "open dashboard"),
-    )
-    uvicorn.run(
-        create_app(config),
-        host=config.backend.host,
-        port=config.backend.port,
-        reload=config.backend.reload,
-        log_config=None,
-    )
+    run_web_server(config, logger)
 
 
 if __name__ == "__main__":

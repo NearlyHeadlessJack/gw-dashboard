@@ -29,6 +29,7 @@ from gw.web.api import (
     list_launches,
     list_satellites,
 )
+from gw.web.runtime import log_frontend_entry
 
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ def create_app(
     *,
     database: DatabaseManager | None = None,
     start_daemon: bool = True,
+    log_frontend_on_startup: bool = True,
 ) -> FastAPI:
     """创建 Web API 应用。"""
     app_config = config or load_config()
@@ -91,6 +93,9 @@ def create_app(
         else:
             app.state.daemon = None
             logger.info("daemon disabled for this app instance")
+
+        if log_frontend_on_startup:
+            log_frontend_entry(logger, app_config)
 
         try:
             yield

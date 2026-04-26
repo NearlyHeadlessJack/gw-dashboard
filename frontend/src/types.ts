@@ -37,6 +37,7 @@ export type LaunchPreview = {
   launch_site: string | null
   rocket_name: string | null
   rocket_serial_number: string | null
+  manufacturer_name: string | null
   satellite_count: number
   orbit: OrbitSummary
 }

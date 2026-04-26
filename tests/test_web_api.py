@@ -99,6 +99,7 @@ def test_dashboard_api_returns_overview(client):
     assert payload["summary"]["tracked_satellites"] == 2
     assert payload["recent_satellites"][0]["group_name"] == "低轨01组"
     assert payload["recent_launches"][0]["rocket_name"] == "长征六号改"
+    assert payload["recent_launches"][0]["manufacturer_name"] == "五院"
     assert payload["manufacturers"][0]["name"] == "五院"
     assert payload["rockets"][0]["name"] == "长征六号改"
     assert payload["rockets"][0]["serial_number"] is None
@@ -107,11 +108,13 @@ def test_dashboard_api_returns_overview(client):
 def test_launches_api_returns_all_launches_newest_first():
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()
+    manufacturer_id = db.create_manufacturer("五院", group_count=9, satellite_count=45)
     for index in range(9):
         db.create_satellite_group(
             name=f"低轨{index + 1:02d}组",
             intl_designator=f"2026-{index + 1:03d}",
             launch_time=datetime(2026, 1, index + 1, 10, 0),
+            manufacturer_id=manufacturer_id,
             satellite_count=index + 1,
         )
     config = AppConfig(
@@ -128,6 +131,7 @@ def test_launches_api_returns_all_launches_newest_first():
     launches = launches_response.json()
     assert len(launches) == 9
     assert launches[0]["intl_designator"] == "2026-009"
+    assert launches[0]["manufacturer_name"] == "五院"
     assert launches[-1]["intl_designator"] == "2026-001"
     assert len(dashboard_response.json()["recent_launches"]) == 8
 

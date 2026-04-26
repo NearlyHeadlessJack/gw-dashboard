@@ -838,6 +838,7 @@ function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
             <th>轨道</th>
             <th>发射场</th>
             <th>火箭</th>
+            <th>卫星制造商</th>
             <th>卫星数</th>
           </tr>
         </thead>
@@ -849,6 +850,7 @@ function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
               <td>{orbitSentence(launch.orbit)}</td>
               <td>{launch.launch_site ?? '-'}</td>
               <td>{rocketName(launch)}</td>
+              <td>{launch.manufacturer_name ?? '-'}</td>
               <td>{formatNumber(launch.satellite_count)}</td>
             </tr>
           ))}

@@ -277,6 +277,7 @@ def _public_launch(row: Row) -> Row:
         "launch_site": row.get("launch_site"),
         "rocket_name": row.get("rocket_name"),
         "rocket_serial_number": row.get("rocket_serial_number"),
+        "manufacturer_name": row.get("manufacturer_name"),
         "satellite_count": _int(row.get("satellite_count")),
         "orbit": _orbit(row),
     }

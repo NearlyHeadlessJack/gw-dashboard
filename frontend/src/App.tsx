@@ -1359,6 +1359,13 @@ function App() {
         {!noticeDismissed && (
           <div className="public-data-notice" role="status">
             <span>数据均来自公开信息，仅供学习参考。</span>
+            <a
+              href="https://github.com/NearlyHeadlessJack/gw-dashboard"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+            </a>
             <button
               className="notice-close"
               type="button"

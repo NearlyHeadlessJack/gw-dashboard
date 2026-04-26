@@ -29,6 +29,16 @@
   font-weight: 650;
 }
 
+.public-data-notice a {
+  color: #0b5f83;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.public-data-notice a:hover {
+  color: #073d57;
+}
+
 .notice-close {
   position: absolute;
   top: 50%;

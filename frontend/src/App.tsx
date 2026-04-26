@@ -806,7 +806,7 @@ function RecentSatellitesTable({
 function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
   if (launches.length === 0) return <EmptyState label="暂无发射数据" compact />
   return (
-    <div className="table-wrap">
+    <div className="table-wrap launch-table-wrap">
       <table>
         <thead>
           <tr>

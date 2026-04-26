@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from gw.database import DatabaseManager
-from gw.orbit import (
-    OrbitPropagationError,
-    generate_previous_orbit_ground_track,
-    propagate_tle_position,
-)
 from gw.utils.rocket import split_rocket_name_and_serial
 
 
@@ -86,10 +81,8 @@ def build_map_satellites(
     database: DatabaseManager,
     *,
     at: datetime | None = None,
-    track_factory: Callable[..., list[Row]] = generate_previous_orbit_ground_track,
-    position_factory: Callable[..., Row] = propagate_tle_position,
 ) -> Row:
-    """返回地图页需要的组级当前位置和过去一圈地面轨迹。"""
+    """返回地图页需要的组级 TLE 数据。"""
     moment = _as_utc(at)
     groups: list[Row] = []
     skipped = 0
@@ -97,12 +90,6 @@ def build_map_satellites(
     for group in database.get_satellite_groups():
         raw_tle = group.get("raw_tle")
         if not raw_tle:
-            skipped += 1
-            continue
-        try:
-            position = position_factory(str(raw_tle), moment)
-            track = track_factory(str(raw_tle), moment)
-        except OrbitPropagationError:
             skipped += 1
             continue
 
@@ -120,8 +107,7 @@ def build_map_satellites(
                 "invalid_satellite_count": _int(group.get("invalid_satellite_count")),
                 "orbit": orbit,
                 "orbit_type": _orbit_type(orbit),
-                "position": position,
-                "track": track,
+                "raw_tle": str(raw_tle),
             }
         )
 
@@ -136,9 +122,8 @@ def build_map_points(
     database: DatabaseManager,
     *,
     at: datetime | None = None,
-    position_factory: Callable[..., Row] = propagate_tle_position,
 ) -> Row:
-    """返回总览地图需要的单星当前位置点。"""
+    """返回总览地图需要的单星 TLE 数据。"""
     moment = _as_utc(at)
     satellites: list[Row] = []
     skipped = 0
@@ -146,11 +131,6 @@ def build_map_points(
     for satellite in list_current_satellites(database):
         raw_tle = satellite.get("raw_tle")
         if not raw_tle:
-            skipped += 1
-            continue
-        try:
-            position = position_factory(str(raw_tle), moment)
-        except OrbitPropagationError:
             skipped += 1
             continue
 
@@ -165,7 +145,7 @@ def build_map_points(
                 "group_intl_designator": satellite.get("group_intl_designator"),
                 "orbit": orbit,
                 "orbit_type": _orbit_type(orbit),
-                "position": position,
+                "raw_tle": str(raw_tle),
             }
         )
 

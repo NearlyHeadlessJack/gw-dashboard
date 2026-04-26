@@ -110,8 +110,7 @@ export type MapGroupTrack = {
   invalid_satellite_count: number
   orbit: OrbitSummary
   orbit_type: 'leo' | 'sso' | 'geo'
-  position: GeoPoint
-  track: GeoPoint[]
+  raw_tle: string
 }
 
 export type MapSatellitePoint = {
@@ -123,7 +122,7 @@ export type MapSatellitePoint = {
   group_intl_designator: string | null
   orbit: OrbitSummary
   orbit_type: 'leo' | 'sso' | 'geo'
-  position: GeoPoint
+  raw_tle: string
 }
 
 export type MapPayload = {

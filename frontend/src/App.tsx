@@ -29,6 +29,7 @@ import {
   Waypoints,
 } from 'lucide-react'
 import { useApi } from './api'
+import { generatePreviousOrbitTrack, propagateTlePosition } from './orbit'
 import type {
   DashboardData,
   GeoPoint,
@@ -124,6 +125,7 @@ function DashboardLayout() {
 }
 
 function OverviewPage() {
+  const now = useClock()
   const { data, loading, error } = useApi<DashboardData>('/api/dashboard')
   const {
     data: satellites,
@@ -193,7 +195,7 @@ function OverviewPage() {
           }
         >
           <div className="overview-map-shell">
-            <OverviewPointMap payload={mapPoints} />
+            <OverviewPointMap payload={mapPoints} now={now} />
             {mapLoading && <div className="overview-map-state">地图同步中</div>}
             {mapError && <div className="overview-map-state error">{mapError}</div>}
           </div>
@@ -375,6 +377,7 @@ function HistoryPage() {
 }
 
 function MapPage() {
+  const now = useClock()
   const [refreshKey, setRefreshKey] = useState(0)
   const { data, loading, error } = useApi<MapPayload>(
     '/api/map/groups',
@@ -388,7 +391,7 @@ function MapPage() {
 
   return (
     <div className="map-page">
-      <SatelliteMap payload={data} />
+      <SatelliteMap payload={data} now={now} />
       <div className="map-hud">
         <div className="map-hud-main">
           <span className="hud-label">GROUP TRACKS</span>
@@ -396,28 +399,33 @@ function MapPage() {
         </div>
         <div className="hud-meta">
           <Clock size={14} />
-          <span>{formatTime(data?.generated_at)}</span>
+          <span>{formatTime(now.toISOString())}</span>
         </div>
         <button
           className="icon-button"
           type="button"
           onClick={() => setRefreshKey((value) => value + 1)}
-          title="刷新轨迹"
+          title="刷新 TLE"
         >
           <RefreshCw size={16} />
         </button>
       </div>
-      {loading && <div className="map-state">轨迹同步中</div>}
+      {loading && <div className="map-state">TLE 同步中</div>}
       {error && <div className="map-state error">{error}</div>}
     </div>
   )
 }
 
-function SatelliteMap({ payload }: { payload: MapPayload | null }) {
+function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const overlayLayerRef = useRef<L.LayerGroup | null>(null)
+  const mapFittedRef = useRef(false)
   const [mapError, setMapError] = useState<string | null>(null)
+  const tleKey =
+    payload?.groups
+      .map((group) => `${group.id}:${group.raw_tle}`)
+      .join('|') ?? ''
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -456,6 +464,10 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
   }, [])
 
   useEffect(() => {
+    mapFittedRef.current = false
+  }, [tleKey])
+
+  useEffect(() => {
     const map = mapRef.current
     const overlayLayer = overlayLayerRef.current
     if (!map || !overlayLayer || !payload) return
@@ -465,8 +477,12 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
 
     let leoIndex = 0
     payload.groups.forEach((group) => {
+      const position = propagateTlePosition(group.raw_tle, now)
+      if (!position) return
+
       const color = LEO_TRACK_COLORS[leoIndex++ % LEO_TRACK_COLORS.length]
-      splitTrackByDateline(group.track).forEach((segment) => {
+      const track = generatePreviousOrbitTrack(group.raw_tle, now)
+      splitTrackByDateline(track).forEach((segment) => {
         L.polyline(segment, {
           color,
           opacity: 0.72,
@@ -475,7 +491,7 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
         }).addTo(overlayLayer)
       })
 
-      const marker = L.circleMarker(pointToLatLng(group.position), {
+      const marker = L.circleMarker(pointToLatLng(position), {
         radius: 4,
         color: '#ffffff',
         weight: 1.3,
@@ -486,15 +502,18 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
         `${group.name ?? group.intl_designator}<br>${mapTooltipIdentifier(group)}<br>${formatKm(group.orbit.perigee_km)} × ${formatKm(group.orbit.apogee_km)}`,
         { direction: 'top', offset: [0, -8] },
       )
-      bounds.extend(pointToLatLng(group.position))
+      bounds.extend(pointToLatLng(position))
     })
 
     if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 3 })
+      if (!mapFittedRef.current) {
+        map.fitBounds(bounds, { padding: [80, 80], maxZoom: 3 })
+        mapFittedRef.current = true
+      }
     } else {
       map.setView([25, 105], 2)
     }
-  }, [payload])
+  }, [payload, now])
 
   return (
     <>
@@ -504,7 +523,13 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
   )
 }
 
-function OverviewPointMap({ payload }: { payload: MapPointsPayload | null }) {
+function OverviewPointMap({
+  payload,
+  now,
+}: {
+  payload: MapPointsPayload | null
+  now: Date
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const overlayLayerRef = useRef<L.LayerGroup | null>(null)
@@ -557,8 +582,11 @@ function OverviewPointMap({ payload }: { payload: MapPointsPayload | null }) {
 
     overlayLayer.clearLayers()
     payload.satellites.forEach((satellite, index) => {
+      const position = propagateTlePosition(satellite.raw_tle, now)
+      if (!position) return
+
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
-      const marker = L.circleMarker(pointToLatLng(satellite.position), {
+      const marker = L.circleMarker(pointToLatLng(position), {
         radius: 3.6,
         color: '#ffffff',
         weight: 1.2,
@@ -570,7 +598,7 @@ function OverviewPointMap({ payload }: { payload: MapPointsPayload | null }) {
         { direction: 'top', offset: [0, -7] },
       )
     })
-  }, [payload])
+  }, [payload, now])
 
   return (
     <>

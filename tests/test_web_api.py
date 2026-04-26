@@ -252,7 +252,7 @@ def test_satellite_history_api_returns_chart_points_oldest_first(client):
     assert payload[0]["apogee_km"] is not None
 
 
-def test_map_groups_api_returns_group_positions_and_previous_orbit_tracks(client):
+def test_map_groups_api_returns_group_tle_for_frontend_propagation(client):
     response = client.get("/api/map/groups?at=2026-04-26T08:00:00Z")
 
     assert response.status_code == 200
@@ -265,13 +265,12 @@ def test_map_groups_api_returns_group_positions_and_previous_orbit_tracks(client
     assert first["representative_intl_designator"] == "2024-240A"
     assert first["satellite_count"] == 2
     assert first["orbit_type"] == "leo"
-    assert -90 <= first["position"]["latitude"] <= 90
-    assert -180 <= first["position"]["longitude"] <= 180
-    assert len(first["track"]) == 601
-    assert first["track"][-1]["timestamp"] == "2026-04-26T08:00:00Z"
+    assert first["raw_tle"] == RAW_TLE_A
+    assert "position" not in first
+    assert "track" not in first
 
 
-def test_map_points_api_returns_satellite_positions_without_tracks(client):
+def test_map_points_api_returns_satellite_tle_for_frontend_propagation(client):
     response = client.get("/api/map/points?at=2026-04-26T08:00:00Z")
 
     assert response.status_code == 200
@@ -281,9 +280,9 @@ def test_map_points_api_returns_satellite_positions_without_tracks(client):
     first = payload["satellites"][0]
     assert first["intl_designator"] == "2024-240A"
     assert first["group_name"] == "低轨01组"
+    assert first["raw_tle"] == RAW_TLE_A
+    assert "position" not in first
     assert "track" not in first
-    assert -90 <= first["position"]["latitude"] <= 90
-    assert -180 <= first["position"]["longitude"] <= 180
 
 
 def test_map_groups_api_marks_geo_groups():
@@ -309,7 +308,7 @@ def test_map_groups_api_marks_geo_groups():
     group = response.json()["groups"][0]
     assert group["orbit_type"] == "geo"
     assert group["orbit"]["perigee_km"] > 35000
-    assert group["position"]["altitude_km"] > 35000
+    assert group["raw_tle"] == RAW_GEO_TLE
 
 
 def test_map_groups_api_marks_sso_groups():

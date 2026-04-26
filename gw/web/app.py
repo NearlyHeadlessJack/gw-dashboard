@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from gw.config import AppConfig, load_config
 from gw.database import DatabaseConfigurationError, DatabaseManager, DatabaseQueryError
@@ -171,8 +171,29 @@ def _parse_time_query(value: str | None) -> datetime:
 
 
 def _mount_frontend(app: FastAPI, config: AppConfig) -> None:
-    dist_dir = Path(config.frontend.dist_dir)
-    if not dist_dir.is_absolute():
-        dist_dir = Path.cwd() / dist_dir
-    if dist_dir.exists():
-        app.mount("/", StaticFiles(directory=dist_dir, html=True), name="frontend")
+    dist_dir = _resolve_frontend_dist_dir(config.frontend.dist_dir)
+    index_file = dist_dir / "index.html"
+    if not index_file.exists():
+        return
+
+    @app.get("/", include_in_schema=False)
+    def frontend_index() -> FileResponse:
+        return FileResponse(index_file)
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend_spa(path: str) -> FileResponse:
+        if path == "" or path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        requested_file = (dist_dir / path).resolve()
+        if requested_file.is_file() and requested_file.is_relative_to(dist_dir):
+            return FileResponse(requested_file)
+        return FileResponse(index_file)
+
+
+def _resolve_frontend_dist_dir(raw_dist_dir: str) -> Path:
+    dist_dir = Path(raw_dist_dir)
+    if dist_dir.is_absolute():
+        return dist_dir
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / dist_dir

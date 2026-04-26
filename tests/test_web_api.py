@@ -139,3 +139,25 @@ def test_map_satellites_api_rejects_invalid_time(client):
     response = client.get("/api/map/satellites?at=not-a-time")
 
     assert response.status_code == 400
+
+
+def test_backend_serves_frontend_dist_as_single_process_app(tmp_path):
+    dist_dir = tmp_path / "dist"
+    assets_dir = dist_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text("<main>GW Dashboard</main>", encoding="utf-8")
+    (assets_dir / "app.js").write_text("console.log('gw')", encoding="utf-8")
+
+    db = DatabaseManager("sqlite3", ":memory:")
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir=str(dist_dir)),
+    )
+    frontend_client = TestClient(create_app(config, database=db))
+
+    assert frontend_client.get("/").text == "<main>GW Dashboard</main>"
+    assert frontend_client.get("/dashboard/history").text == "<main>GW Dashboard</main>"
+    assert frontend_client.get("/map").text == "<main>GW Dashboard</main>"
+    assert frontend_client.get("/assets/app.js").text == "console.log('gw')"
+    assert frontend_client.get("/api/not-found").status_code == 404

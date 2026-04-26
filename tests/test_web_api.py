@@ -100,7 +100,48 @@ def test_dashboard_api_returns_overview(client):
     assert payload["recent_satellites"][0]["group_name"] == "低轨01组"
     assert payload["recent_launches"][0]["rocket_name"] == "长征六号改"
     assert payload["manufacturers"][0]["name"] == "五院"
-    assert payload["rockets"][0]["serial_number"] == "Y1"
+    assert payload["rockets"][0]["name"] == "长征六号改"
+    assert payload["rockets"][0]["serial_number"] is None
+
+
+def test_dashboard_api_aggregates_rocket_statistics_by_model():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.create_rocket(
+        "长征十二号",
+        serial_number="Y1",
+        launch_count=1,
+        satellite_count=10,
+    )
+    db.create_rocket(
+        "长征十二号",
+        serial_number="Y2",
+        launch_count=2,
+        satellite_count=20,
+    )
+    db.create_rocket(
+        "长征五号B",
+        serial_number="Y3",
+        launch_count=1,
+        satellite_count=8,
+    )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    stats_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    response = stats_client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    rockets = {rocket["name"]: rocket for rocket in response.json()["rockets"]}
+    assert list(rockets) == ["长征十二号", "长征五号B"]
+    assert rockets["长征十二号"]["serial_number"] is None
+    assert rockets["长征十二号"]["launch_count"] == 3
+    assert rockets["长征十二号"]["satellite_count"] == 30
+    assert rockets["长征五号B"]["serial_number"] is None
+    assert rockets["长征五号B"]["launch_count"] == 1
 
 
 def test_group_and_satellite_detail_api(client):

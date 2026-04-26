@@ -28,10 +28,7 @@ def build_dashboard(database: DatabaseManager) -> Row:
             database.list_manufacturers(),
             primary_sort_key="satellite_count",
         ),
-        "rockets": _statistics_rows(
-            database.list_rockets(),
-            primary_sort_key="satellite_count",
-        ),
+        "rockets": _rocket_statistics_rows(database.list_rockets()),
     }
 
 
@@ -194,6 +191,40 @@ def _statistics_rows(rows: list[Row], *, primary_sort_key: str) -> list[Row]:
         rows,
         key=lambda row: (_int(row.get(primary_sort_key)), str(row.get("name") or "")),
         reverse=True,
+    )
+
+
+def _rocket_statistics_rows(rows: list[Row]) -> list[Row]:
+    aggregates: dict[str, Row] = {}
+    for row in rows:
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+
+        item = aggregates.setdefault(
+            name,
+            {
+                "id": row.get("id"),
+                "name": name,
+                "serial_number": None,
+                "launch_count": 0,
+                "satellite_count": 0,
+            },
+        )
+        row_id = _int(row.get("id"))
+        current_id = _int(item.get("id"))
+        if row_id and (not current_id or row_id < current_id):
+            item["id"] = row_id
+        item["launch_count"] = _int(item.get("launch_count")) + _int(
+            row.get("launch_count")
+        )
+        item["satellite_count"] = _int(item.get("satellite_count")) + _int(
+            row.get("satellite_count")
+        )
+
+    return _statistics_rows(
+        list(aggregates.values()),
+        primary_sort_key="satellite_count",
     )
 
 

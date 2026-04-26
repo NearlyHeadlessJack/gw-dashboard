@@ -1200,7 +1200,7 @@ function rocketName(
 }
 
 function rocketLabel(rocket: RocketStat): string {
-  return rocket.serial_number ? `${rocket.name} ${rocket.serial_number}` : rocket.name
+  return rocket.name
 }
 
 function orbitSentence(orbit: OrbitSummary): string {

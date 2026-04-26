@@ -33,7 +33,13 @@ cd ..
 uv run -m gw
 ```
 
-`npm run build` 会把前端产物写入 `gw/web/static`，这是发布到 PyPI 的 wheel 中携带的静态资源目录。只有修改或重新构建前端时才需要 Node.js；普通用户安装运行不需要。
+也可以用 `-d` 在启动前自动执行一次前端构建：
+
+```bash
+uv run -m gw -d
+```
+
+`-d` / `--build-frontend` 会在启动后端前运行 `npm run build`，需要本机有 Node.js/npm，且当前安装方式能找到源码里的 `frontend` 目录。`npm run build` 会把前端产物写入 `gw/web/static`，这是发布到 PyPI 的 wheel 中携带的静态资源目录。只有修改或重新构建前端时才需要 Node.js；普通用户安装运行不需要。
 
 默认不需要任何配置文件；后端会使用 SQLite，并自动创建 `~/.gwtracking/database.db`。启动后控制台会打印前端入口 URL，可直接打开 `http://127.0.0.1:8000` 访问页面，关闭后端进程后前端也会停止服务。地图页使用公共高德标准瓦片，不需要配置地图 Key。
 

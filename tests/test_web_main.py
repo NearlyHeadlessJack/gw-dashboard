@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import subprocess
+
+import pytest
 
 from gw.config import AppConfig, BackendConfig, DatabaseConfig, FrontendConfig
 from gw.web import __main__ as web_main
@@ -64,6 +67,106 @@ def test_main_logs_config_and_runs_uvicorn(monkeypatch, caplog):
     assert "database configured: type=sqlite3 connection=:memory:" in caplog.text
     assert calls["config"] is config
     assert calls["logger"] == "gw.web.__main__"
+
+
+def test_main_builds_frontend_before_server_when_flag_is_set(monkeypatch):
+    config = AppConfig(
+        database=DatabaseConfig(connection=":memory:"),
+        backend=BackendConfig(host="127.0.0.1", port=8123),
+    )
+    calls = []
+
+    monkeypatch.setattr(web_main, "configure_console_logging", lambda: None)
+    monkeypatch.setattr(web_main, "load_config", lambda argv: config)
+    monkeypatch.setattr(
+        web_main,
+        "build_frontend_static",
+        lambda logger: calls.append(("build", logger.name)),
+    )
+    monkeypatch.setattr(
+        web_main,
+        "run_web_server",
+        lambda loaded_config, logger: calls.append(
+            ("server", loaded_config, logger.name)
+        ),
+    )
+
+    web_main.main(["-d"])
+
+    assert calls == [
+        ("build", "gw.web.__main__"),
+        ("server", config, "gw.web.__main__"),
+    ]
+
+
+def test_build_frontend_static_runs_npm_build(monkeypatch, tmp_path):
+    frontend_dir = tmp_path / "frontend"
+    frontend_dir.mkdir()
+    (frontend_dir / "package.json").write_text("{}", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(web_main.shutil, "which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr(
+        web_main.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+
+    web_main.build_frontend_static(logging.getLogger("test"), frontend_dir=frontend_dir)
+
+    assert calls == [
+        (
+            ["/bin/npm", "run", "build"],
+            {"cwd": frontend_dir, "check": True},
+        )
+    ]
+
+
+def test_build_frontend_static_fails_without_source_dir(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        web_main.build_frontend_static(
+            logging.getLogger("test"),
+            frontend_dir=tmp_path / "missing",
+        )
+
+    assert exc.value.code == web_main.FRONTEND_BUILD_FAILURE
+
+
+def test_build_frontend_static_fails_without_npm(monkeypatch, tmp_path):
+    frontend_dir = tmp_path / "frontend"
+    frontend_dir.mkdir()
+    (frontend_dir / "package.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(web_main.shutil, "which", lambda name: None)
+
+    with pytest.raises(SystemExit) as exc:
+        web_main.build_frontend_static(
+            logging.getLogger("test"),
+            frontend_dir=frontend_dir,
+        )
+
+    assert exc.value.code == web_main.FRONTEND_BUILD_FAILURE
+
+
+def test_build_frontend_static_fails_when_npm_build_fails(monkeypatch, tmp_path):
+    frontend_dir = tmp_path / "frontend"
+    frontend_dir.mkdir()
+    (frontend_dir / "package.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(web_main.shutil, "which", lambda name: f"/bin/{name}")
+
+    def fail_build(command, **kwargs):
+        raise subprocess.CalledProcessError(returncode=2, cmd=command)
+
+    monkeypatch.setattr(web_main.subprocess, "run", fail_build)
+
+    with pytest.raises(SystemExit) as exc:
+        web_main.build_frontend_static(
+            logging.getLogger("test"),
+            frontend_dir=frontend_dir,
+        )
+
+    assert exc.value.code == web_main.FRONTEND_BUILD_FAILURE
 
 
 def test_run_web_server_prints_frontend_entry_after_server_starts(monkeypatch):

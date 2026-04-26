@@ -2,7 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from gw.config import ConfigError, config_from_env, load_config, required_config_items
+from gw.config import (
+    ConfigError,
+    config_from_env,
+    load_config,
+    parse_startup_args,
+    required_config_items,
+)
 from gw.main import load_startup_config
 
 
@@ -47,6 +53,13 @@ scraper:
     assert config.daemon.data_valid_duration_seconds == 43200
     assert config.daemon.satellite_record_limit == 500
     assert config.scraper.network_timeout_seconds == 10
+
+
+def test_parse_startup_args_accepts_frontend_build_flag():
+    args = parse_startup_args(["-d", "-c", "config.yaml"])
+
+    assert args.build_frontend is True
+    assert args.config_file == "config.yaml"
 
 
 def test_loads_sqlite_config_from_environment_only():

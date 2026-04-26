@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from typing import Sequence
 
 import uvicorn
 
-from gw.config import AppConfig, load_config
+from gw.config import AppConfig, load_config, parse_startup_args
 from gw.web.app import create_app
 from gw.web.runtime import database_connection_for_log, log_frontend_entry
 
 
 STARTUP_FAILURE = 3
+FRONTEND_BUILD_FAILURE = 4
 
 
 def configure_console_logging() -> None:
@@ -73,8 +77,40 @@ def run_web_server(config: AppConfig, logger: logging.Logger) -> None:
         raise SystemExit(STARTUP_FAILURE)
 
 
+def build_frontend_static(
+    logger: logging.Logger,
+    *,
+    frontend_dir: Path | None = None,
+) -> None:
+    source_dir = frontend_dir or Path(__file__).resolve().parents[2] / "frontend"
+    package_json = source_dir / "package.json"
+    if not package_json.exists():
+        logger.error(
+            "frontend source not found: %s; -d requires running from a source checkout",
+            source_dir,
+        )
+        raise SystemExit(FRONTEND_BUILD_FAILURE)
+
+    npm = shutil.which("npm") or shutil.which("npm.cmd")
+    if npm is None:
+        logger.error("npm not found; -d requires Node.js/npm to build frontend assets")
+        raise SystemExit(FRONTEND_BUILD_FAILURE)
+
+    logger.info(
+        "building frontend static assets: cwd=%s command=%s run build",
+        source_dir,
+        npm,
+    )
+    try:
+        subprocess.run([npm, "run", "build"], cwd=source_dir, check=True)
+    except subprocess.CalledProcessError as exc:
+        logger.error("frontend build failed: exit_code=%s", exc.returncode)
+        raise SystemExit(FRONTEND_BUILD_FAILURE) from exc
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     configure_console_logging()
+    args = parse_startup_args(argv)
     config = load_config(argv)
     logger = logging.getLogger(__name__)
     logger.info(
@@ -89,6 +125,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         config.database.type,
         database_connection_for_log(config.database.connection),
     )
+    if args.build_frontend:
+        build_frontend_static(logger)
     run_web_server(config, logger)
 
 

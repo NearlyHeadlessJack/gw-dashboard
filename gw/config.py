@@ -189,6 +189,12 @@ def parse_startup_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         dest="config_file",
         help="YAML 配置文件路径",
     )
+    parser.add_argument(
+        "-d",
+        "--build-frontend",
+        action="store_true",
+        help="启动前重新编译 frontend 前端静态资源（需要 Node.js/npm 和源码目录）",
+    )
     return parser.parse_args(argv)
 
 

@@ -11,7 +11,7 @@ from gw.orbit import (
     generate_previous_orbit_ground_track,
     propagate_tle_position,
 )
-from gw.utils.rocket import normalize_rocket_model_name
+from gw.utils.rocket import split_rocket_name_and_serial
 
 
 Row = dict[str, Any]
@@ -198,7 +198,7 @@ def _statistics_rows(rows: list[Row], *, primary_sort_key: str) -> list[Row]:
 def _rocket_statistics_rows(rows: list[Row]) -> list[Row]:
     aggregates: dict[str, Row] = {}
     for row in rows:
-        name = normalize_rocket_model_name(
+        name, _serial_number = split_rocket_name_and_serial(
             str(row.get("name")) if row.get("name") is not None else None
         )
         if not name:

@@ -18,6 +18,7 @@ from gw.config import AppConfig, load_config
 from gw.daemon import DashboardDaemon
 from gw.database import DatabaseConfigurationError, DatabaseManager, DatabaseQueryError
 from gw.utils.update_database import update_satellite_database
+from gw.utils.update_progress import ConsoleUpdateProgressReporter
 from gw.web.api import (
     build_dashboard,
     build_map_points,
@@ -81,9 +82,15 @@ def create_app(
     async def lifespan(app: FastAPI):
         daemon: DashboardDaemon | None = None
         if start_daemon:
-            daemon = _create_data_daemon(app_config, db)
+            progress_reporter = ConsoleUpdateProgressReporter()
+            daemon = _create_data_daemon(
+                app_config,
+                db,
+                progress_reporter=progress_reporter,
+            )
             app.state.daemon = daemon
             if needs_initial_update:
+                progress_reporter.first_run_waiting()
                 logger.info(
                     "database has no completed update; running initial crawler "
                     "update before web service startup"
@@ -245,7 +252,10 @@ def _ensure_metainfo_defaults(database: DatabaseManager, config: AppConfig) -> N
 def _create_data_daemon(
     config: AppConfig,
     database: DatabaseManager,
+    *,
+    progress_reporter: ConsoleUpdateProgressReporter | None = None,
 ) -> DashboardDaemon:
+    update_progress = progress_reporter or ConsoleUpdateProgressReporter()
     return DashboardDaemon(
         config,
         database,
@@ -257,6 +267,7 @@ def _create_data_daemon(
         data_updater=lambda: update_satellite_database(
             database,
             now=datetime.now(timezone.utc),
+            progress_reporter=update_progress,
         ),
     )
 

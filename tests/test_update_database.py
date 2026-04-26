@@ -1,10 +1,12 @@
-from datetime import datetime, timezone
+import io
 import logging
+from datetime import datetime, timezone
 
 import pytest
 
 from gw.database import DatabaseConfigurationError, DatabaseManager
 from gw.utils import parse_tle, update_satellite_database
+from gw.utils.update_progress import ConsoleUpdateProgressReporter
 
 
 RAW_TLE_A = """\
@@ -262,6 +264,82 @@ def test_update_satellite_database_logs_progress(db, caplog):
     assert any("crawler starting: fetching satellite groups" in message for message in messages)
     assert any("crawler starting: fetching TLE for group=2024-240" in message for message in messages)
     assert any("data update complete" in message for message in messages)
+
+
+def test_update_satellite_database_reports_terminal_progress(db):
+    events = []
+
+    class ProgressReporter:
+        def launch_fetch_started(self):
+            events.append(("launch_started",))
+
+        def launch_fetch_finished(self, group_count):
+            events.append(("launch_finished", group_count))
+
+        def tle_fetch_started(self, total_groups):
+            events.append(("tle_started", total_groups))
+
+        def tle_group_started(self, index, total_groups, intl_designator):
+            events.append(("tle_group_started", index, total_groups, intl_designator))
+
+        def tle_group_finished(self, index, total_groups, intl_designator, tle_count):
+            events.append(
+                ("tle_group_finished", index, total_groups, intl_designator, tle_count)
+            )
+
+        def tle_group_failed(self, index, total_groups, intl_designator):
+            events.append(("tle_group_failed", index, total_groups, intl_designator))
+
+        def tle_fetch_finished(self, total_groups):
+            events.append(("tle_finished", total_groups))
+
+    update_satellite_database(
+        db,
+        huiji_group_fetcher=lambda: [
+            {
+                "名称": "低轨01组A星",
+                "COSPAR": "2024-240",
+                "部署颗数": "1",
+            }
+        ],
+        group_tle_fetcher=lambda intl_designator, satellite_count: [
+            parse_tle(RAW_TLE_A)
+        ],
+        update_metainfo=False,
+        progress_reporter=ProgressReporter(),
+    )
+
+    assert events == [
+        ("launch_started",),
+        ("launch_finished", 1),
+        ("tle_started", 1),
+        ("tle_group_started", 1, 1, "2024-240"),
+        ("tle_group_finished", 1, 1, "2024-240", 1),
+        ("tle_finished", 1),
+    ]
+
+
+def test_console_update_progress_reporter_outputs_first_run_and_tle_bar():
+    stream = io.StringIO()
+    reporter = ConsoleUpdateProgressReporter(stream=stream, bar_width=10)
+
+    reporter.first_run_waiting()
+    reporter.launch_fetch_started()
+    reporter.launch_fetch_finished(2)
+    reporter.tle_fetch_started(2)
+    reporter.tle_group_started(1, 2, "2024-240")
+    reporter.tle_group_finished(1, 2, "2024-240", 1)
+    reporter.tle_group_finished(2, 2, "2024-241", 3)
+    reporter.tle_fetch_finished(2)
+
+    output = stream.getvalue()
+    assert "首次运行，请等待爬取数据完成" in output
+    assert "正在获取卫星发射信息" in output
+    assert "卫星发射信息获取成功，共 2 组" in output
+    assert "正在获取 TLE 数据，共 2 组" in output
+    assert "TLE [#####-----] 1/2  50% 2024-240 1 条" in output
+    assert "TLE [##########] 2/2 100% 2024-241 3 条" in output
+    assert "TLE 数据获取完成" in output
 
 
 def test_update_satellite_database_parses_launch_time_without_space(db):

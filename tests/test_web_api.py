@@ -395,8 +395,14 @@ def test_backend_logs_frontend_entry_when_lifespan_starts(caplog):
 def test_backend_runs_initial_update_before_frontend_entry(monkeypatch):
     db = DatabaseManager("sqlite3", ":memory:")
     events = []
+    reporter = type(
+        "FakeProgressReporter",
+        (),
+        {"first_run_waiting": lambda self: events.append("first_run")},
+    )()
 
-    def fake_update(database, *, now):
+    def fake_update(database, *, now, progress_reporter=None):
+        assert progress_reporter is reporter
         events.append("update")
         database.set_metainfo(
             now,
@@ -409,6 +415,11 @@ def test_backend_runs_initial_update_before_frontend_entry(monkeypatch):
         web_app,
         "log_frontend_entry",
         lambda logger, config: events.append("frontend"),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "ConsoleUpdateProgressReporter",
+        lambda: reporter,
     )
 
     config = AppConfig(
@@ -425,7 +436,7 @@ def test_backend_runs_initial_update_before_frontend_entry(monkeypatch):
     with TestClient(web_app.create_app(config, database=db)):
         events.append("client")
 
-    assert events[:2] == ["update", "frontend"]
+    assert events[:3] == ["first_run", "update", "frontend"]
 
 
 def test_backend_does_not_block_startup_update_when_data_was_updated(monkeypatch):
@@ -437,7 +448,7 @@ def test_backend_does_not_block_startup_update_when_data_was_updated(monkeypatch
         satellite_record_limit=1000,
     )
 
-    def unexpected_update(database, *, now):
+    def unexpected_update(database, *, now, progress_reporter=None):
         raise AssertionError("initial update should not run for initialized database")
 
     monkeypatch.setattr(web_app, "update_satellite_database", unexpected_update)

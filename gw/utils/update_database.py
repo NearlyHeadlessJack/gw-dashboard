@@ -13,6 +13,7 @@ from typing import Any
 from gw.database import DatabaseManager
 from gw.scraper.celestrak import fetch_group_tle_data
 from gw.scraper.huiji import fetch_satellite_groups
+from gw.utils.update_progress import NullUpdateProgressReporter, UpdateProgressReporter
 from gw.utils.rocket import normalize_rocket_model_name, split_rocket_name_and_serial
 
 
@@ -52,20 +53,24 @@ def update_satellite_database(
     group_tle_fetcher: GroupTleFetcher = fetch_group_tle_data,
     now: datetime | None = None,
     update_metainfo: bool = True,
+    progress_reporter: UpdateProgressReporter | None = None,
 ) -> DatabaseUpdateResult:
     """从灰机 wiki 和 TLE 源更新数据库。
 
     灰机 wiki 表只提供组级信息；组表和单星历史表均保存原始 TLE，
     轨道数值由查询接口按需解码。
     """
+    progress = progress_reporter or NullUpdateProgressReporter()
     logger.info("data update starting: initializing database schema")
     database.initialize_database()
     logger.info("crawler starting: fetching satellite groups from huiji wiki")
+    progress.launch_fetch_started()
     groups = [
         group
         for group in (_normalize_group_row(row) for row in huiji_group_fetcher())
         if group is not None
     ]
+    progress.launch_fetch_finished(len(groups))
     logger.info("crawler complete: parsed %s satellite groups", len(groups))
 
     manufacturer_ids = _upsert_manufacturers(database, groups)
@@ -95,6 +100,9 @@ def update_satellite_database(
 
     group_satellites_updated = 0
     satellite_records_added = 0
+    tle_groups = [group for group in groups if group.satellite_count > 0]
+    progress.tle_fetch_started(len(tle_groups))
+    tle_group_index = 0
     for group in groups:
         if group.satellite_count <= 0:
             logger.info(
@@ -104,16 +112,36 @@ def update_satellite_database(
             )
             continue
 
+        tle_group_index += 1
         logger.info(
             "crawler starting: fetching TLE for group=%s expected_satellites=%s",
             group.intl_designator,
             group.satellite_count,
         )
-        parsed_tles = sorted(
-            group_tle_fetcher(group.intl_designator, group.satellite_count),
-            key=lambda item: DatabaseManager._intl_designator_sort_key(
-                _satellite_intl_designator(item) or ""
-            ),
+        progress.tle_group_started(
+            tle_group_index,
+            len(tle_groups),
+            group.intl_designator,
+        )
+        try:
+            parsed_tles = sorted(
+                group_tle_fetcher(group.intl_designator, group.satellite_count),
+                key=lambda item: DatabaseManager._intl_designator_sort_key(
+                    _satellite_intl_designator(item) or ""
+                ),
+            )
+        except Exception:
+            progress.tle_group_failed(
+                tle_group_index,
+                len(tle_groups),
+                group.intl_designator,
+            )
+            raise
+        progress.tle_group_finished(
+            tle_group_index,
+            len(tle_groups),
+            group.intl_designator,
+            len(parsed_tles),
         )
         logger.info(
             "crawler complete: group=%s tle_records=%s",
@@ -191,6 +219,7 @@ def update_satellite_database(
             valid_satellite_count,
             invalid_satellite_count,
         )
+    progress.tle_fetch_finished(len(tle_groups))
 
     if update_metainfo:
         _mark_database_updated(database, now or datetime.now(timezone.utc))

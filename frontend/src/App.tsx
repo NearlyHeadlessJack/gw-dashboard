@@ -1621,7 +1621,7 @@ function drawExportMapCaption(
   context.fillText('星网卫星位置图', 42, 52)
   context.font = '500 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
   context.fillText(`${formatNumber(satelliteCount)} 颗 · 北京时间 ${exportedAt}`, 42, 76)
-  context.fillText('由 GW-Tracking 工具导出', 42, 100)
+  context.fillText('由 GW-DashBoard 工具导出', 42, 100)
   context.fillText(PROJECT_GITHUB_URL, 42, 124)
   context.restore()
 }

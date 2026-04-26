@@ -75,7 +75,7 @@ def update_satellite_database(
 
     manufacturer_ids = _upsert_manufacturers(database, groups)
     rocket_ids = _upsert_rockets(database, groups)
-    logger.info(
+    logger.debug(
         "data update upserted statistics: manufacturers=%s rockets=%s",
         len(manufacturer_ids),
         len(rocket_ids),
@@ -105,7 +105,7 @@ def update_satellite_database(
     tle_group_index = 0
     for group in groups:
         if group.satellite_count <= 0:
-            logger.info(
+            logger.debug(
                 "crawler skipping group %s: satellite_count=%s",
                 group.intl_designator,
                 group.satellite_count,
@@ -113,7 +113,7 @@ def update_satellite_database(
             continue
 
         tle_group_index += 1
-        logger.info(
+        logger.debug(
             "crawler starting: fetching TLE for group=%s expected_satellites=%s",
             group.intl_designator,
             group.satellite_count,
@@ -143,7 +143,7 @@ def update_satellite_database(
             group.intl_designator,
             len(parsed_tles),
         )
-        logger.info(
+        logger.debug(
             "crawler complete: group=%s tle_records=%s",
             group.intl_designator,
             len(parsed_tles),
@@ -213,7 +213,7 @@ def update_satellite_database(
             valid_satellite_count=valid_satellite_count,
             invalid_satellite_count=invalid_satellite_count,
         )
-        logger.info(
+        logger.debug(
             "data update group saved: group=%s valid=%s invalid=%s",
             group.intl_designator,
             valid_satellite_count,

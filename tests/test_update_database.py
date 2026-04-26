@@ -261,9 +261,13 @@ def test_update_satellite_database_logs_progress(db, caplog):
 
     messages = [record.getMessage() for record in caplog.records]
     assert any("data update starting" in message for message in messages)
-    assert any("crawler starting: fetching satellite groups" in message for message in messages)
-    assert any("crawler starting: fetching TLE for group=2024-240" in message for message in messages)
+    assert any(
+        "crawler starting: fetching satellite groups" in message
+        for message in messages
+    )
     assert any("data update complete" in message for message in messages)
+    assert not any("group=2024-240" in message for message in messages)
+    assert not any("expected_satellites" in message for message in messages)
 
 
 def test_update_satellite_database_reports_terminal_progress(db):

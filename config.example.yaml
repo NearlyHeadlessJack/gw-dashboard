@@ -1,0 +1,23 @@
+database:
+  type: sqlite3
+  connection: database/gw.sqlite3
+
+backend:
+  host: 127.0.0.1
+  port: 8000
+  reload: false
+  cors_origins:
+    - http://localhost:5173
+  cache_ttl_seconds: 30
+
+frontend:
+  origin: http://localhost:5173
+  dist_dir: frontend/dist
+
+daemon:
+  update_check_interval_seconds: 3600
+  data_valid_duration_seconds: 86400
+  satellite_record_limit: 1000
+
+scraper:
+  network_timeout_seconds: 30

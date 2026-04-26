@@ -1,6 +1,93 @@
-import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  BrowserRouter,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+} from 'react-router-dom'
+import { load as loadAMap } from '@amap/amap-jsapi-loader'
+import {
+  Activity,
+  AlertCircle,
+  ChartLine,
+  CircleDot,
+  Clock,
+  Crosshair,
+  Factory,
+  History,
+  LayoutDashboard,
+  ListTree,
+  Map,
+  MapPinned,
+  Orbit,
+  RadioTower,
+  RefreshCw,
+  Rocket,
+  Satellite,
+  Search,
+  Waypoints,
+} from 'lucide-react'
+import { useApi } from './api'
+import type {
+  DashboardData,
+  GeoPoint,
+  GroupDetail,
+  GroupSummary,
+  HistoryPoint,
+  LaunchPreview,
+  MapPayload,
+  OrbitSummary,
+  RocketStat,
+  SatellitePreview,
+} from './types'
 import './App.css'
+
+declare global {
+  interface Window {
+    _AMapSecurityConfig?: {
+      securityJsCode: string
+    }
+  }
+}
+
+type IconComponent = typeof LayoutDashboard
+
+type MenuItem = {
+  path: string
+  label: string
+  icon: IconComponent
+}
+
+type AMapOverlay = {
+  setMap?: (map: AMapMap | null) => void
+}
+
+type AMapMap = {
+  add: (overlay: AMapOverlay | AMapOverlay[]) => void
+  clearMap: () => void
+  destroy: () => void
+  setFitView: (
+    overlays?: AMapOverlay[],
+    immediately?: boolean,
+    avoid?: number[],
+    maxZoom?: number,
+  ) => void
+}
+
+type AMapApi = {
+  Map: new (container: HTMLDivElement, options: object) => AMapMap
+  Marker: new (options: object) => AMapOverlay
+  Polyline: new (options: object) => AMapOverlay
+  Pixel: new (x: number, y: number) => object
+}
+
+const DASHBOARD_MENU: MenuItem[] = [
+  { path: '/dashboard', label: '总览', icon: LayoutDashboard },
+  { path: '/dashboard/orbits', label: '组与单星', icon: Orbit },
+  { path: '/dashboard/launches', label: '发射统计', icon: Rocket },
+  { path: '/dashboard/history', label: '历史轨道', icon: History },
+]
 
 function useClock() {
   const [now, setNow] = useState(() => new Date())
@@ -11,59 +98,887 @@ function useClock() {
   return now
 }
 
-const DASHBOARD_MENU = [
-  { path: '/dashboard', label: '仪表盘', icon: '◈' },
-  { path: '/dashboard/orbits', label: '当前轨道', icon: '◎' },
-  { path: '/dashboard/launches', label: '发射统计', icon: '△' },
-  { path: '/dashboard/history', label: '历史轨道', icon: '∰' },
-]
-
 function DashboardLayout() {
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
-        <div className="sidebar-scanlines" />
-        <nav className="sidebar-nav">
-          {DASHBOARD_MENU.map((item, index) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/dashboard'}
-              className={({ isActive }) =>
-                `menu-item${isActive ? ' active' : ''}`
-              }
-              style={{ animationDelay: `${index * 60}ms` }}
-            >
-              <span className="menu-icon">{item.icon}</span>
-              <span className="menu-label">{item.label}</span>
-              <span className="menu-indicator" />
-            </NavLink>
-          ))}
+        <nav className="sidebar-nav" aria-label="Dashboard sections">
+          {DASHBOARD_MENU.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path === '/dashboard'}
+                className={({ isActive }) =>
+                  `menu-item${isActive ? ' active' : ''}`
+                }
+              >
+                <Icon size={17} strokeWidth={1.9} />
+                <span className="menu-label">{item.label}</span>
+                <span className="menu-indicator" />
+              </NavLink>
+            )
+          })}
         </nav>
         <div className="sidebar-footer">
-          <div className="status-dot" />
+          <span className="status-dot" />
           <span className="status-text">ONLINE</span>
         </div>
       </aside>
       <main className="dashboard-content">
-        <div className="content-grid-overlay" />
         <Routes>
-          <Route index element={<div />} />
-          <Route path="orbits" element={<div />} />
-          <Route path="launches" element={<div />} />
-          <Route path="history" element={<div />} />
+          <Route index element={<OverviewPage />} />
+          <Route path="orbits" element={<OrbitExplorerPage />} />
+          <Route path="launches" element={<LaunchStatsPage />} />
+          <Route path="history" element={<HistoryPage />} />
         </Routes>
       </main>
     </div>
   )
 }
 
-function MapPage() {
+function OverviewPage() {
+  const { data, loading, error } = useApi<DashboardData>('/api/dashboard')
+
+  if (loading) return <LoadingState label="仪表盘同步中" />
+  if (error) return <ErrorState message={error} />
+  if (!data) return <EmptyState label="暂无仪表盘数据" />
+
   return (
-    <div className="map-page">
-      <div className="map-grid-overlay" />
+    <div className="page-stack">
+      <section className="summary-grid">
+        <MetricCard
+          icon={Satellite}
+          label="在轨总数"
+          value={data.summary.total_satellites}
+          tone="blue"
+        />
+        <MetricCard
+          icon={Activity}
+          label="有效卫星"
+          value={data.summary.valid_satellites}
+          tone="green"
+        />
+        <MetricCard
+          icon={AlertCircle}
+          label="失效卫星"
+          value={data.summary.invalid_satellites}
+          tone="red"
+        />
+        <MetricCard
+          icon={RadioTower}
+          label="发射组"
+          value={data.summary.launch_groups}
+          tone="amber"
+          meta={`已跟踪 ${formatNumber(data.summary.tracked_satellites)} 颗`}
+        />
+      </section>
+
+      <div className="dashboard-grid">
+        <Panel
+          className="span-7"
+          title="最近发射卫星"
+          icon={Orbit}
+          meta={formatDateTime(data.summary.last_updated_at)}
+        >
+          <RecentSatellitesTable satellites={data.recent_satellites} />
+        </Panel>
+        <Panel className="span-5" title="最近发射" icon={Rocket}>
+          <LaunchList launches={data.recent_launches} />
+        </Panel>
+        <Panel className="span-6" title="制造商统计" icon={Factory}>
+          <StatBars
+            rows={data.manufacturers.map((item) => ({
+              id: item.id,
+              label: item.name,
+              primary: item.satellite_count,
+              secondary: `${item.group_count} 组`,
+            }))}
+          />
+        </Panel>
+        <Panel className="span-6" title="火箭统计" icon={Waypoints}>
+          <StatBars
+            rows={data.rockets.map((item) => ({
+              id: item.id,
+              label: rocketLabel(item),
+              primary: item.satellite_count,
+              secondary: `${item.launch_count} 次`,
+            }))}
+          />
+        </Panel>
+      </div>
     </div>
   )
+}
+
+function OrbitExplorerPage() {
+  const { data: groups, loading, error } = useApi<GroupSummary[]>('/api/groups')
+  const [groupIntl, setGroupIntl] = useState('')
+  const [satelliteIntl, setSatelliteIntl] = useState('')
+  const selectedGroupIntl = groupIntl || groups?.[0]?.intl_designator || ''
+
+  const detailPath = selectedGroupIntl ? `/api/groups/${selectedGroupIntl}` : null
+  const { data: detail, loading: detailLoading } = useApi<GroupDetail>(detailPath)
+  const selectedSatellite = useMemo(
+    () =>
+      detail?.satellites.find(
+        (satellite) => satellite.intl_designator === satelliteIntl,
+      ) ?? null,
+    [detail, satelliteIntl],
+  )
+
+  if (loading) return <LoadingState label="星组索引同步中" />
+  if (error) return <ErrorState message={error} />
+  if (!groups || groups.length === 0) return <EmptyState label="暂无星组数据" />
+
+  return (
+    <div className="page-stack">
+      <SelectorPanel
+        groups={groups}
+        selectedGroup={selectedGroupIntl}
+        selectedSatellite={satelliteIntl}
+        satellites={detail?.satellites ?? []}
+        onGroupChange={(value) => {
+          setGroupIntl(value)
+          setSatelliteIntl('')
+        }}
+        onSatelliteChange={setSatelliteIntl}
+      />
+
+      {detailLoading && <LoadingState label="轨道数据同步中" />}
+      {!detailLoading && detail && !selectedSatellite && (
+        <GroupDetailView detail={detail} />
+      )}
+      {!detailLoading && selectedSatellite && (
+        <SatelliteDetailView satellite={selectedSatellite} />
+      )}
+    </div>
+  )
+}
+
+function LaunchStatsPage() {
+  const { data, loading, error } = useApi<DashboardData>('/api/dashboard')
+
+  if (loading) return <LoadingState label="发射统计同步中" />
+  if (error) return <ErrorState message={error} />
+  if (!data) return <EmptyState label="暂无发射统计" />
+
+  return (
+    <div className="page-stack">
+      <Panel title="最近 8 次发射" icon={Rocket}>
+        <LaunchTable launches={data.recent_launches} />
+      </Panel>
+      <div className="dashboard-grid">
+        <Panel className="span-6" title="制造商" icon={Factory}>
+          <StatBars
+            rows={data.manufacturers.map((item) => ({
+              id: item.id,
+              label: item.name,
+              primary: item.satellite_count,
+              secondary: `${item.group_count} 组`,
+            }))}
+          />
+        </Panel>
+        <Panel className="span-6" title="火箭" icon={Waypoints}>
+          <RocketTable rockets={data.rockets} />
+        </Panel>
+      </div>
+    </div>
+  )
+}
+
+function HistoryPage() {
+  const { data: groups, loading, error } = useApi<GroupSummary[]>('/api/groups')
+  const [groupIntl, setGroupIntl] = useState('')
+  const [satelliteIntl, setSatelliteIntl] = useState('')
+  const selectedGroupIntl = groupIntl || groups?.[0]?.intl_designator || ''
+
+  const { data: detail } = useApi<GroupDetail>(
+    selectedGroupIntl ? `/api/groups/${selectedGroupIntl}` : null,
+  )
+  const selectedSatelliteIntl =
+    satelliteIntl || detail?.satellites[0]?.intl_designator || ''
+
+  const historyPath = selectedSatelliteIntl
+    ? `/api/satellites/${selectedSatelliteIntl}/history`
+    : null
+  const {
+    data: history,
+    loading: historyLoading,
+    error: historyError,
+  } = useApi<HistoryPoint[]>(historyPath)
+
+  if (loading) return <LoadingState label="历史索引同步中" />
+  if (error) return <ErrorState message={error} />
+  if (!groups || groups.length === 0) return <EmptyState label="暂无历史数据" />
+
+  return (
+    <div className="page-stack">
+      <SelectorPanel
+        groups={groups}
+        selectedGroup={selectedGroupIntl}
+        selectedSatellite={selectedSatelliteIntl}
+        satellites={detail?.satellites ?? []}
+        onGroupChange={(value) => {
+          setGroupIntl(value)
+          setSatelliteIntl('')
+        }}
+        onSatelliteChange={setSatelliteIntl}
+        satelliteOnly
+      />
+      <Panel title="近地点 / 远地点变化" icon={ChartLine}>
+        {historyLoading && <LoadingState label="历史轨道同步中" compact />}
+        {historyError && <ErrorState message={historyError} compact />}
+        {!historyLoading && history && <HistoryChart points={history} />}
+      </Panel>
+    </div>
+  )
+}
+
+function MapPage() {
+  const [refreshKey, setRefreshKey] = useState(0)
+  const { data, loading, error } = useApi<MapPayload>(
+    '/api/map/satellites',
+    refreshKey,
+  )
+
+  useEffect(() => {
+    const id = setInterval(() => setRefreshKey((value) => value + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="map-page">
+      <SatelliteMap payload={data} />
+      <div className="map-hud">
+        <div className="map-hud-main">
+          <span className="hud-label">TRACKED</span>
+          <strong>{formatNumber(data?.satellites.length ?? 0)}</strong>
+        </div>
+        <div className="hud-meta">
+          <Clock size={14} />
+          <span>{formatTime(data?.generated_at)}</span>
+        </div>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={() => setRefreshKey((value) => value + 1)}
+          title="刷新轨迹"
+        >
+          <RefreshCw size={16} />
+        </button>
+      </div>
+      {loading && <div className="map-state">轨迹同步中</div>}
+      {error && <div className="map-state error">{error}</div>}
+    </div>
+  )
+}
+
+function SatelliteMap({ payload }: { payload: MapPayload | null }) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<AMapMap | null>(null)
+  const amapRef = useRef<AMapApi | null>(null)
+  const [mapError, setMapError] = useState<string | null>(null)
+  const amapKey = import.meta.env.VITE_AMAP_KEY
+  const securityCode = import.meta.env.VITE_AMAP_SECURITY_JS_CODE
+
+  useEffect(() => {
+    if (!containerRef.current || !amapKey) {
+      setMapError(amapKey ? null : 'AMap Key 未配置')
+      return
+    }
+
+    let cancelled = false
+    if (securityCode) {
+      window._AMapSecurityConfig = { securityJsCode: securityCode }
+    }
+
+    loadAMap({
+      key: amapKey,
+      version: '2.0',
+      plugins: ['AMap.Scale'],
+    })
+      .then((AMapValue: unknown) => {
+        if (cancelled || !containerRef.current) return
+        const AMap = AMapValue as AMapApi
+        amapRef.current = AMap
+        mapRef.current = new AMap.Map(containerRef.current, {
+          center: [105, 25],
+          zoom: 2,
+          viewMode: '3D',
+          pitch: 18,
+          mapStyle: 'amap://styles/darkblue',
+        })
+        setMapError(null)
+      })
+      .catch(() => {
+        if (!cancelled) setMapError('高德地图加载失败')
+      })
+
+    return () => {
+      cancelled = true
+      mapRef.current?.destroy()
+      mapRef.current = null
+      amapRef.current = null
+    }
+  }, [amapKey, securityCode])
+
+  useEffect(() => {
+    const map = mapRef.current
+    const AMap = amapRef.current
+    if (!map || !AMap || !payload) return
+
+    map.clearMap()
+    const overlays: AMapOverlay[] = []
+    payload.satellites.forEach((satellite) => {
+      const path = satellite.track.map(pointToLngLat)
+      if (path.length > 1) {
+        overlays.push(
+          new AMap.Polyline({
+            path,
+            strokeColor: satellite.status === '有效' ? '#19d89f' : '#ff5a68',
+            strokeOpacity: 0.72,
+            strokeWeight: 2,
+            lineJoin: 'round',
+            zIndex: 24,
+          }),
+        )
+      }
+      overlays.push(
+        new AMap.Marker({
+          position: pointToLngLat(satellite.position),
+          content: `<span class="sat-marker ${
+            satellite.status === '有效' ? 'valid' : 'invalid'
+          }"></span>`,
+          offset: new AMap.Pixel(-6, -6),
+          title: satellite.intl_designator,
+          zIndex: 40,
+        }),
+      )
+    })
+    if (overlays.length > 0) {
+      map.add(overlays)
+      map.setFitView(overlays, false, [80, 80, 80, 80], 3)
+    }
+  }, [payload])
+
+  return (
+    <>
+      <div ref={containerRef} className="amap-container" />
+      {mapError && <FallbackWorldMap payload={payload} message={mapError} />}
+    </>
+  )
+}
+
+function FallbackWorldMap({
+  payload,
+  message,
+}: {
+  payload: MapPayload | null
+  message: string
+}) {
+  return (
+    <div className="fallback-map">
+      <div className="fallback-grid" />
+      {payload?.satellites.map((satellite) => (
+        <span
+          key={satellite.intl_designator}
+          className={`fallback-satellite ${
+            satellite.status === '有效' ? 'valid' : 'invalid'
+          }`}
+          style={{
+            left: `${((satellite.position.longitude + 180) / 360) * 100}%`,
+            top: `${((90 - satellite.position.latitude) / 180) * 100}%`,
+          }}
+          title={satellite.intl_designator}
+        />
+      ))}
+      <div className="fallback-message">
+        <MapPinned size={18} />
+        <span>{message}</span>
+      </div>
+    </div>
+  )
+}
+
+function SelectorPanel({
+  groups,
+  selectedGroup,
+  selectedSatellite,
+  satellites,
+  onGroupChange,
+  onSatelliteChange,
+  satelliteOnly = false,
+}: {
+  groups: GroupSummary[]
+  selectedGroup: string
+  selectedSatellite: string
+  satellites: SatellitePreview[]
+  onGroupChange: (value: string) => void
+  onSatelliteChange: (value: string) => void
+  satelliteOnly?: boolean
+}) {
+  return (
+    <Panel title="对象选择" icon={Search} dense>
+      <div className="selector-grid">
+        <label className="field">
+          <span>星组</span>
+          <select
+            value={selectedGroup}
+            onChange={(event) => onGroupChange(event.target.value)}
+          >
+            {groups.map((group) => (
+              <option key={group.intl_designator} value={group.intl_designator}>
+                {group.name} · {group.intl_designator}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>卫星</span>
+          <select
+            value={selectedSatellite}
+            onChange={(event) => onSatelliteChange(event.target.value)}
+          >
+            {!satelliteOnly && <option value="">整组</option>}
+            {satellites.map((satellite) => (
+              <option
+                key={satellite.intl_designator}
+                value={satellite.intl_designator}
+              >
+                {satellite.intl_designator}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </Panel>
+  )
+}
+
+function GroupDetailView({ detail }: { detail: GroupDetail }) {
+  return (
+    <div className="dashboard-grid">
+      <Panel className="span-4" title={detail.name} icon={ListTree}>
+        <InfoGrid
+          rows={[
+            ['国际识别号', detail.intl_designator],
+            ['卫星数量', formatNumber(detail.satellite_count)],
+            ['有效 / 失效', `${detail.valid_satellite_count} / ${detail.invalid_satellite_count}`],
+            ['发射时间', formatDateTime(detail.launch_time)],
+            ['发射场', detail.launch_site ?? '-'],
+            ['火箭', rocketName(detail)],
+            ['制造商', detail.manufacturer_name ?? '-'],
+          ]}
+        />
+      </Panel>
+      <Panel className="span-8" title="组内卫星" icon={Satellite}>
+        <RecentSatellitesTable satellites={detail.satellites} />
+      </Panel>
+      <Panel className="span-12" title="组轨道概览" icon={Orbit}>
+        <OrbitTiles orbit={detail.orbit} />
+      </Panel>
+    </div>
+  )
+}
+
+function SatelliteDetailView({ satellite }: { satellite: SatellitePreview }) {
+  return (
+    <div className="dashboard-grid">
+      <Panel className="span-5" title={satellite.intl_designator} icon={Satellite}>
+        <InfoGrid
+          rows={[
+            ['状态', satellite.status],
+            ['所属星组', satellite.group_name ?? '-'],
+            ['组识别号', satellite.group_intl_designator ?? '-'],
+            ['TLE 历元', formatDateTime(satellite.epoch_at)],
+            ['发射时间', formatDateTime(satellite.launch_time)],
+            ['发射场', satellite.launch_site ?? '-'],
+            ['火箭', rocketName(satellite)],
+            ['制造商', satellite.manufacturer_name ?? '-'],
+          ]}
+        />
+      </Panel>
+      <Panel className="span-7" title="当前轨道" icon={Orbit}>
+        <OrbitTiles orbit={satellite.orbit} />
+      </Panel>
+    </div>
+  )
+}
+
+function HistoryChart({ points }: { points: HistoryPoint[] }) {
+  const chartPoints = points.filter(
+    (point) => point.perigee_km !== null && point.apogee_km !== null,
+  )
+  if (chartPoints.length === 0) return <EmptyState label="暂无可绘制历史轨道" compact />
+
+  const width = 820
+  const height = 280
+  const padding = { top: 22, right: 28, bottom: 42, left: 54 }
+  const values = chartPoints.flatMap((point) => [
+    point.perigee_km ?? 0,
+    point.apogee_km ?? 0,
+  ])
+  const minValue = Math.min(...values) - 10
+  const maxValue = Math.max(...values) + 10
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const xFor = (index: number) =>
+    padding.left + (plotWidth * index) / Math.max(chartPoints.length - 1, 1)
+  const yFor = (value: number) =>
+    padding.top + plotHeight - ((value - minValue) / (maxValue - minValue)) * plotHeight
+  const pathFor = (field: 'perigee_km' | 'apogee_km') =>
+    chartPoints
+      .map((point, index) => {
+        const value = point[field] ?? 0
+        return `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(2)} ${yFor(value).toFixed(2)}`
+      })
+      .join(' ')
+
+  return (
+    <div className="chart-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="历史轨道折线图">
+        <line
+          x1={padding.left}
+          y1={height - padding.bottom}
+          x2={width - padding.right}
+          y2={height - padding.bottom}
+          className="chart-axis"
+        />
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={height - padding.bottom}
+          className="chart-axis"
+        />
+        {[0, 0.5, 1].map((ratio) => {
+          const y = padding.top + plotHeight * ratio
+          const value = maxValue - (maxValue - minValue) * ratio
+          return (
+            <g key={ratio}>
+              <line
+                x1={padding.left}
+                y1={y}
+                x2={width - padding.right}
+                y2={y}
+                className="chart-grid"
+              />
+              <text x={12} y={y + 4} className="chart-label">
+                {Math.round(value)}km
+              </text>
+            </g>
+          )
+        })}
+        <path d={pathFor('apogee_km')} className="chart-line apogee" />
+        <path d={pathFor('perigee_km')} className="chart-line perigee" />
+        {chartPoints.map((point, index) => (
+          <g key={point.id}>
+            <circle
+              cx={xFor(index)}
+              cy={yFor(point.apogee_km ?? 0)}
+              r="3.5"
+              className="chart-dot apogee"
+            />
+            <circle
+              cx={xFor(index)}
+              cy={yFor(point.perigee_km ?? 0)}
+              r="3.5"
+              className="chart-dot perigee"
+            />
+            <text
+              x={xFor(index)}
+              y={height - 15}
+              textAnchor="middle"
+              className="chart-date"
+            >
+              {formatShortDate(point.epoch_at)}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div className="legend-row">
+        <span className="legend-item apogee">远地点</span>
+        <span className="legend-item perigee">近地点</span>
+      </div>
+    </div>
+  )
+}
+
+function RecentSatellitesTable({
+  satellites,
+}: {
+  satellites: SatellitePreview[]
+}) {
+  if (satellites.length === 0) return <EmptyState label="暂无卫星数据" compact />
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>国际识别号</th>
+            <th>组名称</th>
+            <th>倾角</th>
+            <th>近地点</th>
+            <th>远地点</th>
+            <th>离心率</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          {satellites.map((satellite) => (
+            <tr key={`${satellite.group_intl_designator}-${satellite.intl_designator}`}>
+              <td className="mono">{satellite.intl_designator}</td>
+              <td>{satellite.group_name ?? '-'}</td>
+              <td>{formatDegree(satellite.orbit.inclination_deg)}</td>
+              <td>{formatKm(satellite.orbit.perigee_km)}</td>
+              <td>{formatKm(satellite.orbit.apogee_km)}</td>
+              <td>{formatEccentricity(satellite.orbit.eccentricity)}</td>
+              <td>
+                <StatusBadge status={satellite.status} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
+  if (launches.length === 0) return <EmptyState label="暂无发射数据" compact />
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>发射时间</th>
+            <th>组名称</th>
+            <th>轨道</th>
+            <th>发射场</th>
+            <th>火箭</th>
+            <th>卫星数</th>
+          </tr>
+        </thead>
+        <tbody>
+          {launches.map((launch) => (
+            <tr key={launch.intl_designator}>
+              <td>{formatDateTime(launch.launch_time)}</td>
+              <td>{launch.name ?? launch.intl_designator}</td>
+              <td>{orbitSentence(launch.orbit)}</td>
+              <td>{launch.launch_site ?? '-'}</td>
+              <td>{rocketName(launch)}</td>
+              <td>{formatNumber(launch.satellite_count)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function RocketTable({ rockets }: { rockets: RocketStat[] }) {
+  if (rockets.length === 0) return <EmptyState label="暂无火箭统计" compact />
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>火箭</th>
+            <th>发射次数</th>
+            <th>部署卫星</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rockets.map((rocket) => (
+            <tr key={rocket.id}>
+              <td>{rocketLabel(rocket)}</td>
+              <td>{formatNumber(rocket.launch_count)}</td>
+              <td>{formatNumber(rocket.satellite_count)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function LaunchList({ launches }: { launches: LaunchPreview[] }) {
+  if (launches.length === 0) return <EmptyState label="暂无发射数据" compact />
+  return (
+    <div className="launch-list">
+      {launches.map((launch) => (
+        <div key={launch.intl_designator} className="launch-item">
+          <div>
+            <strong>{launch.name ?? launch.intl_designator}</strong>
+            <span>{formatDateTime(launch.launch_time)}</span>
+          </div>
+          <small>{rocketName(launch)}</small>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function StatBars({
+  rows,
+}: {
+  rows: { id: number; label: string; primary: number; secondary: string }[]
+}) {
+  if (rows.length === 0) return <EmptyState label="暂无统计数据" compact />
+  const maxValue = Math.max(...rows.map((row) => row.primary), 1)
+  return (
+    <div className="stat-bars">
+      {rows.slice(0, 8).map((row) => (
+        <div key={row.id} className="stat-row">
+          <div className="stat-row-head">
+            <span>{row.label}</span>
+            <strong>{formatNumber(row.primary)}</strong>
+          </div>
+          <div className="bar-track">
+            <span style={{ width: `${(row.primary / maxValue) * 100}%` }} />
+          </div>
+          <small>{row.secondary}</small>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function OrbitTiles({ orbit }: { orbit: OrbitSummary }) {
+  return (
+    <div className="orbit-tiles">
+      <MetricInline label="轨道倾角" value={formatDegree(orbit.inclination_deg)} />
+      <MetricInline label="近地点" value={formatKm(orbit.perigee_km)} />
+      <MetricInline label="远地点" value={formatKm(orbit.apogee_km)} />
+      <MetricInline
+        label="离心率"
+        value={formatEccentricity(orbit.eccentricity)}
+      />
+    </div>
+  )
+}
+
+function InfoGrid({ rows }: { rows: [string, string | number][] }) {
+  return (
+    <dl className="info-grid">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  meta,
+  tone,
+}: {
+  icon: IconComponent
+  label: string
+  value: number
+  meta?: string
+  tone: 'blue' | 'green' | 'red' | 'amber'
+}) {
+  return (
+    <article className={`metric-card ${tone}`}>
+      <Icon size={20} />
+      <div>
+        <span>{label}</span>
+        <strong>{formatNumber(value)}</strong>
+        {meta && <small>{meta}</small>}
+      </div>
+    </article>
+  )
+}
+
+function MetricInline({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="metric-inline">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function Panel({
+  title,
+  icon: Icon,
+  children,
+  className = '',
+  dense = false,
+  meta,
+}: {
+  title: string
+  icon: IconComponent
+  children: React.ReactNode
+  className?: string
+  dense?: boolean
+  meta?: string
+}) {
+  return (
+    <section className={`panel ${dense ? 'dense' : ''} ${className}`}>
+      <header className="panel-header">
+        <div>
+          <Icon size={17} />
+          <h2>{title}</h2>
+        </div>
+        {meta && <span>{meta}</span>}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const valid = status === '有效'
+  return (
+    <span className={`status-badge ${valid ? 'valid' : 'invalid'}`}>
+      <CircleDot size={12} />
+      {status}
+    </span>
+  )
+}
+
+function LoadingState({
+  label,
+  compact = false,
+}: {
+  label: string
+  compact?: boolean
+}) {
+  return <div className={`state ${compact ? 'compact' : ''}`}>{label}</div>
+}
+
+function ErrorState({
+  message,
+  compact = false,
+}: {
+  message: string
+  compact?: boolean
+}) {
+  return (
+    <div className={`state error ${compact ? 'compact' : ''}`}>
+      <AlertCircle size={18} />
+      <span>{message}</span>
+    </div>
+  )
+}
+
+function EmptyState({
+  label,
+  compact = false,
+}: {
+  label: string
+  compact?: boolean
+}) {
+  return <div className={`state empty ${compact ? 'compact' : ''}`}>{label}</div>
 }
 
 function App() {
@@ -73,41 +988,38 @@ function App() {
       <div className="app">
         <header className="top-nav">
           <div className="nav-brand">
-            <span className="brand-icon">◉</span>
+            <Crosshair size={19} />
             <span className="brand-text">星网</span>
             <span className="brand-sub">GW DASHBOARD</span>
           </div>
-          <nav className="nav-tabs">
+          <nav className="nav-tabs" aria-label="Primary navigation">
             <NavLink
               to="/dashboard"
-              className={({ isActive }) =>
-                `tab${isActive ? ' active' : ''}`
-              }
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
             >
-              <span className="tab-icon">▦</span>
+              <LayoutDashboard size={16} />
               仪表盘
             </NavLink>
             <NavLink
               to="/map"
-              className={({ isActive }) =>
-                `tab${isActive ? ' active' : ''}`
-              }
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
             >
-              <span className="tab-icon">◎</span>
+              <Map size={16} />
               地图
             </NavLink>
           </nav>
           <div className="nav-time">
-            <span className="time-label">UTC</span>
-            <span className="time-value">
-              {now.toISOString().slice(11, 19)}
-            </span>
+            <span>UTC</span>
+            <strong>{now.toISOString().slice(11, 19)}</strong>
           </div>
           <div className="nav-time">
-            <span className="time-label">BJT</span>
-            <span className="time-value">
-              {now.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}
-            </span>
+            <span>BJT</span>
+            <strong>
+              {now.toLocaleTimeString('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                hour12: false,
+              })}
+            </strong>
           </div>
         </header>
         <div className="app-body">
@@ -120,6 +1032,75 @@ function App() {
       </div>
     </BrowserRouter>
   )
+}
+
+function pointToLngLat(point: GeoPoint): [number, number] {
+  return [point.longitude, point.latitude]
+}
+
+function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '-'
+  return new Intl.NumberFormat('zh-CN').format(value)
+}
+
+function formatKm(value: number | null): string {
+  if (value === null) return '-'
+  return `${Math.round(value).toLocaleString('zh-CN')} km`
+}
+
+function formatDegree(value: number | null): string {
+  if (value === null) return '-'
+  return `${value.toFixed(2)}°`
+}
+
+function formatEccentricity(value: number | null): string {
+  if (value === null) return '-'
+  return value.toFixed(6)
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatShortDate(value: string | null): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function formatTime(value: string | null | undefined): string {
+  if (!value) return '--:--:--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--:--:--'
+  return date.toISOString().slice(11, 19)
+}
+
+function rocketName(
+  value: Pick<LaunchPreview, 'rocket_name' | 'rocket_serial_number'>,
+): string {
+  if (!value.rocket_name) return '-'
+  return value.rocket_serial_number
+    ? `${value.rocket_name} ${value.rocket_serial_number}`
+    : value.rocket_name
+}
+
+function rocketLabel(rocket: RocketStat): string {
+  return rocket.serial_number ? `${rocket.name} ${rocket.serial_number}` : rocket.name
+}
+
+function orbitSentence(orbit: OrbitSummary): string {
+  return `${formatDegree(orbit.inclination_deg)} / ${formatKm(
+    orbit.perigee_km,
+  )} - ${formatKm(orbit.apogee_km)}`
 }
 
 export default App

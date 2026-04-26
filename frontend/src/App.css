@@ -30,6 +30,9 @@
 }
 
 .public-data-notice a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: #0b5f83;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -37,6 +40,12 @@
 
 .public-data-notice a:hover {
   color: #073d57;
+}
+
+.github-mark {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
 }
 
 .notice-close {

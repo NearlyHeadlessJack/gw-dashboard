@@ -551,7 +551,7 @@ function GroupDetailView({ detail }: { detail: GroupDetail }) {
             ['国际识别号', detail.intl_designator],
             ['卫星数量', formatNumber(detail.satellite_count)],
             ['有效 / 失效', `${detail.valid_satellite_count} / ${detail.invalid_satellite_count}`],
-            ['发射时间', formatDateTime(detail.launch_time)],
+            ['发射时间', formatLaunchDateTime(detail.launch_time)],
             ['发射场', detail.launch_site ?? '-'],
             ['火箭', rocketName(detail)],
             ['制造商', detail.manufacturer_name ?? '-'],
@@ -578,7 +578,7 @@ function SatelliteDetailView({ satellite }: { satellite: SatellitePreview }) {
             ['所属星组', satellite.group_name ?? '-'],
             ['组识别号', satellite.group_intl_designator ?? '-'],
             ['TLE 历元', formatDateTime(satellite.epoch_at)],
-            ['发射时间', formatDateTime(satellite.launch_time)],
+            ['发射时间', formatLaunchDateTime(satellite.launch_time)],
             ['发射场', satellite.launch_site ?? '-'],
             ['火箭', rocketName(satellite)],
             ['制造商', satellite.manufacturer_name ?? '-'],
@@ -845,7 +845,7 @@ function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
         <tbody>
           {launches.map((launch) => (
             <tr key={launch.intl_designator}>
-              <td>{formatDateTime(launch.launch_time)}</td>
+              <td>{formatLaunchDateTime(launch.launch_time)}</td>
               <td>{launch.name ?? launch.intl_designator}</td>
               <td>{orbitSentence(launch.orbit)}</td>
               <td>{launch.launch_site ?? '-'}</td>
@@ -900,7 +900,7 @@ function LaunchList({
         <div key={launch.intl_designator} className="launch-item">
           <div>
             <strong>{launch.name ?? launch.intl_designator}</strong>
-            <span>{formatDateTime(launch.launch_time)}</span>
+            <span>{formatLaunchDateTime(launch.launch_time)}</span>
           </div>
           <small>{rocketName(launch)}</small>
         </div>
@@ -1211,6 +1211,19 @@ function formatDateTime(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatLaunchDateTime(value: string | null): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',

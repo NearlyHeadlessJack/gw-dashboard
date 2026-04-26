@@ -45,6 +45,11 @@ def get_group_detail(database: DatabaseManager, intl_designator: str) -> Row | N
     detail = database.get_satellite_group_detail(intl_designator)
     if detail is None:
         return None
+    if detail.get("launch_success") is False:
+        return {
+            **_public_group(detail),
+            "satellites": [],
+        }
     return {
         **_public_group(detail),
         "satellites": [
@@ -85,6 +90,10 @@ def build_map_satellites(
     skipped = 0
 
     for group in database.get_satellite_groups():
+        if group.get("launch_success") is False:
+            skipped += 1
+            continue
+
         raw_tle = group.get("raw_tle")
         if not raw_tle:
             skipped += 1
@@ -161,6 +170,9 @@ def list_current_satellites(
     source_groups = groups if groups is not None else database.get_satellite_groups()
     satellites: list[Row] = []
     for group in source_groups:
+        if group.get("launch_success") is False:
+            continue
+
         intl_designator = group.get("intl_designator")
         if not intl_designator:
             continue
@@ -311,6 +323,7 @@ def _public_group(row: Row) -> Row:
         "intl_designator": row.get("intl_designator"),
         "launch_time": row.get("launch_time"),
         "launch_site": row.get("launch_site"),
+        "launch_success": row.get("launch_success"),
         "rocket_id": row.get("rocket_id"),
         "rocket_name": row.get("rocket_name"),
         "rocket_serial_number": row.get("rocket_serial_number"),
@@ -329,6 +342,7 @@ def _public_launch(row: Row) -> Row:
         "intl_designator": row.get("intl_designator"),
         "launch_time": row.get("launch_time"),
         "launch_site": row.get("launch_site"),
+        "launch_success": row.get("launch_success"),
         "rocket_name": row.get("rocket_name"),
         "rocket_serial_number": row.get("rocket_serial_number"),
         "manufacturer_name": _public_manufacturer_name(row.get("manufacturer_name")),
@@ -348,6 +362,7 @@ def _public_satellite(row: Row, *, group: Row) -> Row:
         "group_intl_designator": group.get("intl_designator"),
         "launch_time": group.get("launch_time"),
         "launch_site": group.get("launch_site"),
+        "launch_success": group.get("launch_success"),
         "rocket_name": group.get("rocket_name"),
         "rocket_serial_number": group.get("rocket_serial_number"),
         "manufacturer_name": _public_manufacturer_name(group.get("manufacturer_name")),

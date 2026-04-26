@@ -83,6 +83,7 @@ def client():
         satellite_count=2,
         valid_satellite_count=1,
         invalid_satellite_count=1,
+        launch_success=True,
         raw_tle=RAW_TLE_A,
     )
     db.add_group_satellite(
@@ -136,6 +137,7 @@ def test_dashboard_api_returns_overview(client):
     assert payload["recent_satellites"][0]["manufacturer_name"] == "航天五院"
     assert payload["recent_launches"][0]["rocket_name"] == "长征六号改"
     assert payload["recent_launches"][0]["manufacturer_name"] == "航天五院"
+    assert payload["recent_launches"][0]["launch_success"] is True
     assert payload["manufacturers"][0]["name"] == "航天五院"
     assert payload["rockets"][0]["name"] == "长征六号改"
     assert payload["rockets"][0]["serial_number"] is None
@@ -255,6 +257,7 @@ def test_launches_api_returns_all_launches_newest_first():
     assert len(launches) == 9
     assert launches[0]["intl_designator"] == "2026-009"
     assert launches[0]["manufacturer_name"] == "航天五院"
+    assert launches[0]["launch_success"] is None
     assert launches[-1]["intl_designator"] == "2026-001"
     assert len(dashboard_response.json()["recent_launches"]) == 8
 
@@ -349,11 +352,55 @@ def test_group_and_satellite_detail_api(client):
     satellite_response = client.get("/api/satellites/2024-240A")
 
     assert group_response.status_code == 200
+    assert group_response.json()["launch_success"] is True
     assert group_response.json()["satellites"][0]["intl_designator"] == "2024-240A"
     assert satellite_response.status_code == 200
     satellite = satellite_response.json()
     assert satellite["intl_designator"] == "2024-240A"
+    assert satellite["launch_success"] is True
     assert satellite["orbit"]["perigee_km"] is not None
+
+
+def test_api_omits_stale_satellites_for_failed_launches():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    group_id = db.create_satellite_group(
+        name="失败01组",
+        intl_designator="2026-099",
+        satellite_count=1,
+        valid_satellite_count=0,
+        invalid_satellite_count=0,
+        launch_success=False,
+        raw_tle=RAW_TLE_A,
+    )
+    db.add_group_satellite(
+        group_id,
+        epoch_at=datetime(2026, 4, 26, 8, 0),
+        intl_designator="2026-099A",
+        raw_tle=RAW_TLE_A,
+    )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    failed_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    dashboard = failed_client.get("/api/dashboard").json()
+    group = failed_client.get("/api/groups/2026-099").json()
+    satellites = failed_client.get("/api/satellites").json()
+    map_groups = failed_client.get("/api/map/groups").json()
+    map_points = failed_client.get("/api/map/points").json()
+
+    assert dashboard["summary"]["total_satellites"] == 1
+    assert dashboard["summary"]["tracked_satellites"] == 0
+    assert dashboard["recent_launches"][0]["launch_success"] is False
+    assert group["launch_success"] is False
+    assert group["satellites"] == []
+    assert satellites == []
+    assert map_groups["groups"] == []
+    assert map_groups["skipped_groups"] == 1
+    assert map_points["satellites"] == []
 
 
 def test_satellite_history_api_returns_chart_points_oldest_first(client):

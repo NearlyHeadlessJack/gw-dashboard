@@ -46,6 +46,7 @@ def test_update_satellite_database_updates_group_related_tables_and_tle_data(db)
             "发射时间": "2024年12月16日 18:00",
             "运载火箭": "长征六号改 Y9",
             "发射地点": "太原",
+            "结果": "发射成功",
         }
     ]
     tle_calls = []
@@ -88,6 +89,7 @@ def test_update_satellite_database_updates_group_related_tables_and_tle_data(db)
     assert group["satellite_count"] == 2
     assert group["valid_satellite_count"] == 2
     assert group["invalid_satellite_count"] == 0
+    assert group["launch_success"] is True
     assert group["raw_tle"] == parse_tle(RAW_TLE_A)["raw_tle"]
     assert group["inclination_deg"] == pytest.approx(parse_tle(RAW_TLE_A)["inclination_deg"])
 
@@ -105,6 +107,40 @@ def test_update_satellite_database_updates_group_related_tables_and_tle_data(db)
     assert db.get_satellite_history("2024-240A")[0]["raw_tle"] == parse_tle(RAW_TLE_A)["raw_tle"]
     assert db.get_satellite_history("2024-240B")[0]["raw_tle"] == parse_tle(RAW_TLE_B)["raw_tle"]
     assert db.get_metainfo()["last_updated_at"] == now.replace(tzinfo=None)
+
+
+def test_update_satellite_database_skips_tle_for_failed_launch(db):
+    tle_calls = []
+
+    def unexpected_group_tle_fetcher(intl_designator, satellite_count):
+        tle_calls.append((intl_designator, satellite_count))
+        raise AssertionError("failed launch should not fetch TLE")
+
+    result = update_satellite_database(
+        db,
+        huiji_group_fetcher=lambda: [
+            {
+                "名称": "低轨失败组A-B星",
+                "COSPAR": "2026-099",
+                "部署颗数": "2",
+                "结果": "发射失败",
+            }
+        ],
+        group_tle_fetcher=unexpected_group_tle_fetcher,
+        update_metainfo=False,
+    )
+
+    assert result.groups_updated == 1
+    assert result.group_satellites_updated == 0
+    assert result.satellite_records_added == 0
+    assert tle_calls == []
+
+    group = db.get_satellite_group_by_intl_designator("2026-099")
+    assert group["launch_success"] is False
+    assert group["valid_satellite_count"] == 0
+    assert group["invalid_satellite_count"] == 0
+    assert group["raw_tle"] is None
+    assert db.list_group_satellites(group["id"]) == []
 
 
 def test_update_satellite_database_strips_yuanzheng_upper_stage_from_rocket_name(db):

@@ -157,6 +157,7 @@ def test_get_satellite_groups_returns_group_level_rows_with_related_names(db):
         satellite_count=18,
         valid_satellite_count=17,
         invalid_satellite_count=1,
+        launch_success=True,
         raw_tle=RAW_TLE_A,
     )
     db.create_satellite_group(
@@ -185,6 +186,7 @@ def test_get_satellite_groups_returns_group_level_rows_with_related_names(db):
     assert groups[0]["satellite_count"] == 18
     assert groups[0]["valid_satellite_count"] == 17
     assert groups[0]["invalid_satellite_count"] == 1
+    assert groups[0]["launch_success"] is True
     assert groups[0]["raw_tle"] == RAW_TLE_A
     assert_decoded_orbit(groups[0], RAW_TLE_A)
 
@@ -192,6 +194,7 @@ def test_get_satellite_groups_returns_group_level_rows_with_related_names(db):
     assert groups[1]["intl_designator"] == "2025-001"
     assert groups[1]["valid_satellite_count"] == 0
     assert groups[1]["invalid_satellite_count"] == 0
+    assert groups[1]["launch_success"] is None
     assert groups[1]["raw_tle"] is None
     assert groups[1]["inclination_deg"] is None
     assert groups[1]["perigee_km"] is None
@@ -224,6 +227,7 @@ def test_get_satellite_group_detail_returns_group_and_member_satellites(db):
         satellite_count=2,
         valid_satellite_count=1,
         invalid_satellite_count=1,
+        launch_success=True,
         raw_tle=RAW_TLE_A,
     )
     first_satellite_id = db.add_group_satellite(
@@ -248,6 +252,7 @@ def test_get_satellite_group_detail_returns_group_and_member_satellites(db):
     detail = db.get_satellite_group_detail("2024-240")
 
     assert detail["id"] == group_id
+    assert detail["launch_success"] is True
     assert detail["name"] == "低轨01组"
     assert detail["intl_designator"] == "2024-240"
     assert detail["launch_time"] == datetime(2024, 12, 16, 10, 0)

@@ -77,6 +77,7 @@ def test_initialize_database_creates_fixed_schema():
     assert "raw_tle" in satellite_group_columns
     assert "valid_satellite_count" in satellite_group_columns
     assert "invalid_satellite_count" in satellite_group_columns
+    assert "launch_success" in satellite_group_columns
     assert ORBIT_COLUMNS.isdisjoint(satellite_group_columns)
 
 

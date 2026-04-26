@@ -905,6 +905,7 @@ function GroupDetailView({ detail }: { detail: GroupDetail }) {
             ['卫星数量', formatNumber(detail.satellite_count)],
             ['有效 / 失效', `${detail.valid_satellite_count} / ${detail.invalid_satellite_count}`],
             ['发射时间', formatLaunchDateTime(detail.launch_time)],
+            ['发射结果', launchResultText(detail.launch_success)],
             ['发射场', detail.launch_site ?? '-'],
             ['火箭', rocketName(detail)],
             ['制造商', detail.manufacturer_name ?? '-'],
@@ -932,6 +933,7 @@ function SatelliteDetailView({ satellite }: { satellite: SatellitePreview }) {
             ['组识别号', satellite.group_intl_designator ?? '-'],
             ['TLE 历元', formatDateTime(satellite.epoch_at)],
             ['发射时间', formatLaunchDateTime(satellite.launch_time)],
+            ['发射结果', launchResultText(satellite.launch_success)],
             ['发射场', satellite.launch_site ?? '-'],
             ['火箭', rocketName(satellite)],
             ['制造商', satellite.manufacturer_name ?? '-'],
@@ -1216,6 +1218,7 @@ function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
             <th>发射场</th>
             <th>火箭</th>
             <th>卫星制造商</th>
+            <th>结果</th>
             <th>卫星数</th>
           </tr>
         </thead>
@@ -1228,6 +1231,9 @@ function LaunchTable({ launches }: { launches: LaunchPreview[] }) {
               <td>{launch.launch_site ?? '-'}</td>
               <td>{rocketName(launch)}</td>
               <td>{launch.manufacturer_name ?? '-'}</td>
+              <td>
+                <LaunchResultBadge value={launch.launch_success} />
+              </td>
               <td>{formatNumber(launch.satellite_count)}</td>
             </tr>
           ))}
@@ -1284,6 +1290,7 @@ function LaunchList({
             <span>{formatLaunchDateTime(launch.launch_time)}</span>
           </div>
           <small>{rocketName(launch)}</small>
+          <LaunchResultBadge value={launch.launch_success} />
         </div>
       ))}
     </div>
@@ -1418,6 +1425,14 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`status-badge ${valid ? 'valid' : 'invalid'}`}>
       <CircleDot size={12} />
       {status}
+    </span>
+  )
+}
+
+function LaunchResultBadge({ value }: { value: boolean | null }) {
+  return (
+    <span className={`launch-result ${launchResultClassName(value)}`}>
+      {launchResultText(value)}
     </span>
   )
 }
@@ -1889,6 +1904,18 @@ function rocketName(
 
 function rocketLabel(rocket: RocketStat): string {
   return rocket.name
+}
+
+function launchResultText(value: boolean | null): string {
+  if (value === true) return '成功'
+  if (value === false) return '失败'
+  return '未知'
+}
+
+function launchResultClassName(value: boolean | null): string {
+  if (value === true) return 'success'
+  if (value === false) return 'failed'
+  return 'unknown'
 }
 
 function groupExplorerPath(intlDesignator: string): string {

@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 
 from sqlalchemy import (
     URL,
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -82,6 +83,7 @@ SATELLITE_GROUPS_TABLE = Table(
     Column("intl_designator", String(64), nullable=False, unique=True),
     Column("launch_time", DateTime(timezone=True), nullable=True),
     Column("launch_site", String(255), nullable=True),
+    Column("launch_success", Boolean, nullable=True),
     Column("rocket_id", Integer, ForeignKey("rockets.id"), nullable=True),
     Column("manufacturer_id", Integer, ForeignKey("manufacturers.id"), nullable=True),
     Column("satellite_count", Integer, nullable=False, default=0),
@@ -116,6 +118,7 @@ FIXED_SCHEMA: dict[str, dict[str, type[TypeEngine]]] = {
         "intl_designator": String,
         "launch_time": DateTime,
         "launch_site": String,
+        "launch_success": Boolean,
         "rocket_id": Integer,
         "manufacturer_id": Integer,
         "satellite_count": Integer,
@@ -352,6 +355,7 @@ class DatabaseManager:
         intl_designator: str,
         launch_time: datetime | None = None,
         launch_site: str | None = None,
+        launch_success: bool | None = None,
         rocket_id: int | None = None,
         manufacturer_id: int | None = None,
         satellite_count: int = 0,
@@ -367,6 +371,7 @@ class DatabaseManager:
                 "intl_designator": intl_designator,
                 "launch_time": launch_time,
                 "launch_site": launch_site,
+                "launch_success": launch_success,
                 "rocket_id": rocket_id,
                 "manufacturer_id": manufacturer_id,
                 "satellite_count": satellite_count,
@@ -409,6 +414,7 @@ class DatabaseManager:
                     SATELLITE_GROUPS_TABLE.c.intl_designator,
                     SATELLITE_GROUPS_TABLE.c.launch_time,
                     SATELLITE_GROUPS_TABLE.c.launch_site,
+                    SATELLITE_GROUPS_TABLE.c.launch_success,
                     SATELLITE_GROUPS_TABLE.c.rocket_id,
                     ROCKETS_TABLE.c.name.label("rocket_name"),
                     ROCKETS_TABLE.c.serial_number.label("rocket_serial_number"),
@@ -450,6 +456,7 @@ class DatabaseManager:
                     SATELLITE_GROUPS_TABLE.c.intl_designator,
                     SATELLITE_GROUPS_TABLE.c.launch_time,
                     SATELLITE_GROUPS_TABLE.c.launch_site,
+                    SATELLITE_GROUPS_TABLE.c.launch_success,
                     SATELLITE_GROUPS_TABLE.c.rocket_id,
                     ROCKETS_TABLE.c.name.label("rocket_name"),
                     ROCKETS_TABLE.c.serial_number.label("rocket_serial_number"),
@@ -573,6 +580,7 @@ class DatabaseManager:
                 "intl_designator",
                 "launch_time",
                 "launch_site",
+                "launch_success",
                 "rocket_id",
                 "manufacturer_id",
                 "satellite_count",
@@ -934,6 +942,8 @@ class DatabaseManager:
             return isinstance(actual_type, sqltypes.Integer)
         if issubclass(expected_type, Float):
             return isinstance(actual_type, (sqltypes.Float, sqltypes.Numeric))
+        if issubclass(expected_type, Boolean):
+            return isinstance(actual_type, (sqltypes.Boolean, sqltypes.Integer))
         if issubclass(expected_type, DateTime):
             return isinstance(actual_type, sqltypes.DateTime)
         if issubclass(expected_type, String):
@@ -1052,6 +1062,11 @@ class DatabaseManager:
             self._add_nullable_column(
                 "satellite_groups",
                 Column("raw_tle", Text, nullable=True),
+            )
+        if "launch_success" not in satellite_group_columns:
+            self._add_nullable_column(
+                "satellite_groups",
+                Column("launch_success", Boolean, nullable=True),
             )
 
     def _migrate_group_table_schema(self, group_id: int) -> None:

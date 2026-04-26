@@ -24,6 +24,7 @@ export type SatellitePreview = {
   group_intl_designator: string | null
   launch_time: string | null
   launch_site: string | null
+  launch_success: boolean | null
   rocket_name: string | null
   rocket_serial_number: string | null
   manufacturer_name: string | null
@@ -35,6 +36,7 @@ export type LaunchPreview = {
   intl_designator: string
   launch_time: string | null
   launch_site: string | null
+  launch_success: boolean | null
   rocket_name: string | null
   rocket_serial_number: string | null
   manufacturer_name: string | null
@@ -81,6 +83,7 @@ export type GroupSummary = {
   intl_designator: string
   launch_time: string | null
   launch_site: string | null
+  launch_success: boolean | null
   rocket_id: number | null
   rocket_name: string | null
   rocket_serial_number: string | null

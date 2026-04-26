@@ -44,6 +44,7 @@ class _NormalizedGroup:
     rocket_serial_number: str | None
     launch_time: datetime | None
     launch_site: str | None
+    launch_success: bool | None
 
 
 def update_satellite_database(
@@ -100,7 +101,11 @@ def update_satellite_database(
 
     group_satellites_updated = 0
     satellite_records_added = 0
-    tle_groups = [group for group in groups if group.satellite_count > 0]
+    tle_groups = [
+        group
+        for group in groups
+        if group.satellite_count > 0 and group.launch_success is not False
+    ]
     progress.tle_fetch_started(len(tle_groups))
     tle_group_index = 0
     try:
@@ -110,6 +115,12 @@ def update_satellite_database(
                     "crawler skipping group %s: satellite_count=%s",
                     group.intl_designator,
                     group.satellite_count,
+                )
+                continue
+            if group.launch_success is False:
+                logger.debug(
+                    "crawler skipping failed launch group %s",
+                    group.intl_designator,
                 )
                 continue
 
@@ -341,12 +352,15 @@ def _upsert_satellite_group(
         "intl_designator": group.intl_designator,
         "launch_time": group.launch_time,
         "launch_site": group.launch_site,
+        "launch_success": group.launch_success,
         "rocket_id": rocket_id,
         "manufacturer_id": manufacturer_id,
         "satellite_count": group.satellite_count,
         "valid_satellite_count": 0,
         "invalid_satellite_count": 0,
     }
+    if group.launch_success is False:
+        fields["raw_tle"] = None
     if existing:
         database.update_satellite_group(existing["id"], **fields)
         return int(existing["id"])
@@ -370,6 +384,9 @@ def _normalize_group_row(row: Mapping[str, Any]) -> _NormalizedGroup | None:
         rocket_serial_number=rocket_serial_number,
         launch_time=_parse_datetime(_first_text(row, "发射时间", "发射日期")),
         launch_site=_clean_text(_first_text(row, "发射地点", "发射场")),
+        launch_success=_parse_launch_success(
+            _first_text(row, "结果", "发射结果", "任务结果", "状态")
+        ),
     )
 
 
@@ -443,6 +460,17 @@ def _normalize_satellite_status(value: Any) -> str:
     if value is None:
         return "有效"
     return "失效" if str(value).strip() == "失效" else "有效"
+
+
+def _parse_launch_success(value: str | None) -> bool | None:
+    cleaned = _clean_text(value)
+    if cleaned is None:
+        return None
+    if any(marker in cleaned for marker in ("失败", "失利", "未成功")):
+        return False
+    if any(marker in cleaned for marker in ("成功", "正常", "入轨")):
+        return True
+    return None
 
 
 def _parse_int(value: str | None) -> int:

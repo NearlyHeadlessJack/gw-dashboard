@@ -618,6 +618,35 @@ tbody tr:hover td {
   color: var(--danger);
 }
 
+.launch-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(60, 78, 112, 0.28);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.launch-result.success {
+  color: var(--success);
+  background: rgba(25, 216, 159, 0.08);
+  border-color: rgba(25, 216, 159, 0.25);
+}
+
+.launch-result.failed {
+  color: var(--danger);
+  background: rgba(255, 95, 117, 0.08);
+  border-color: rgba(255, 95, 117, 0.25);
+}
+
+.launch-result.unknown {
+  color: var(--text-muted);
+}
+
 .launch-list {
   display: flex;
   flex-direction: column;
@@ -626,7 +655,7 @@ tbody tr:hover td {
 
 .launch-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, auto) auto;
   align-items: center;
   gap: 12px;
   min-height: 52px;
@@ -658,6 +687,11 @@ tbody tr:hover td {
 .launch-item small {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.launch-item .launch-result {
+  justify-self: end;
+  display: inline-flex;
 }
 
 .stat-bars {

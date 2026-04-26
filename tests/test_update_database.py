@@ -105,6 +105,39 @@ def test_update_satellite_database_updates_group_related_tables_and_tle_data(db)
     assert db.get_metainfo()["last_updated_at"] == now.replace(tzinfo=None)
 
 
+def test_update_satellite_database_strips_yuanzheng_upper_stage_from_rocket_name(db):
+    stale_rocket_id = db.create_rocket(
+        "长征五号B遥二/远征二号",
+        launch_count=9,
+        satellite_count=99,
+    )
+
+    update_satellite_database(
+        db,
+        huiji_group_fetcher=lambda: [
+            {
+                "名称": "高轨01星",
+                "COSPAR": "2026-001",
+                "部署颗数": "1",
+                "运载火箭": "长征五号B遥二/远征二号",
+            }
+        ],
+        group_tle_fetcher=lambda intl_designator, satellite_count: [
+            parse_tle(RAW_TLE_A)
+        ],
+        update_metainfo=False,
+    )
+
+    rockets = db.list_rockets()
+    assert len(rockets) == 1
+    assert rockets[0]["id"] == stale_rocket_id
+    assert rockets[0]["name"] == "长征五号B"
+    assert rockets[0]["serial_number"] == "遥二"
+    assert rockets[0]["launch_count"] == 1
+    assert rockets[0]["satellite_count"] == 1
+    assert "/远征二号" not in rockets[0]["name"]
+
+
 def test_update_satellite_database_reuses_existing_rows_on_second_update(db):
     first_rows = [
         {

@@ -6,13 +6,16 @@ from gw.utils.tle import (
     calculate_tle_orbit_elements,
     parse_tle,
 )
+from gw.utils.rocket import normalize_rocket_model_name, split_rocket_name_and_serial
 
 __all__ = [
     "DatabaseUpdateResult",
     "TleParseError",
     "calculate_tle_checksum",
     "calculate_tle_orbit_elements",
+    "normalize_rocket_model_name",
     "parse_tle",
+    "split_rocket_name_and_serial",
     "update_satellite_database",
 ]
 

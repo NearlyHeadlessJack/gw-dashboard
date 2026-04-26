@@ -125,6 +125,11 @@ def test_dashboard_api_aggregates_rocket_statistics_by_model():
         launch_count=1,
         satellite_count=8,
     )
+    db.create_rocket(
+        "长征五号B/远征二号",
+        launch_count=1,
+        satellite_count=4,
+    )
     config = AppConfig(
         database=DatabaseConfig(type="sqlite3", connection=":memory:"),
         backend=BackendConfig(cache_ttl_seconds=0),
@@ -141,7 +146,8 @@ def test_dashboard_api_aggregates_rocket_statistics_by_model():
     assert rockets["长征十二号"]["launch_count"] == 3
     assert rockets["长征十二号"]["satellite_count"] == 30
     assert rockets["长征五号B"]["serial_number"] is None
-    assert rockets["长征五号B"]["launch_count"] == 1
+    assert rockets["长征五号B"]["launch_count"] == 2
+    assert rockets["长征五号B"]["satellite_count"] == 12
 
 
 def test_group_and_satellite_detail_api(client):

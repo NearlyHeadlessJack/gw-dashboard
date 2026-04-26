@@ -13,6 +13,7 @@ from typing import Any
 from gw.database import DatabaseManager
 from gw.scraper.celestrak import fetch_group_tle_data
 from gw.scraper.huiji import fetch_satellite_groups
+from gw.utils.rocket import normalize_rocket_model_name, split_rocket_name_and_serial
 
 
 logger = logging.getLogger(__name__)
@@ -248,19 +249,29 @@ def _upsert_rockets(
     for group in groups:
         if not group.rocket_name:
             continue
-        key = (group.rocket_name, group.rocket_serial_number)
+        key = (
+            normalize_rocket_model_name(group.rocket_name) or group.rocket_name,
+            group.rocket_serial_number,
+        )
         aggregates[key]["launch_count"] += 1
         aggregates[key]["satellite_count"] += group.satellite_count
 
-    existing = {
-        (item["name"], item.get("serial_number")): item
-        for item in database.list_rockets()
-    }
+    existing: dict[tuple[str, str | None], dict[str, Any]] = {}
+    for item in database.list_rockets():
+        key = _existing_rocket_key(item)
+        if key[0] and key not in existing:
+            existing[key] = item
+
     result: dict[tuple[str, str | None], int] = {}
     for (name, serial_number), counts in aggregates.items():
         if (name, serial_number) in existing:
             rocket_id = existing[(name, serial_number)]["id"]
-            database.update_rocket(rocket_id, **counts)
+            database.update_rocket(
+                rocket_id,
+                name=name,
+                serial_number=serial_number,
+                **counts,
+            )
         else:
             rocket_id = database.create_rocket(
                 name,
@@ -269,6 +280,18 @@ def _upsert_rockets(
             )
         result[(name, serial_number)] = rocket_id
     return result
+
+
+def _existing_rocket_key(row: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    raw_name = row.get("name")
+    name, embedded_serial = split_rocket_name_and_serial(
+        str(raw_name) if raw_name is not None else None
+    )
+    raw_serial = row.get("serial_number")
+    serial_number = (
+        _clean_text(str(raw_serial)) if raw_serial is not None else embedded_serial
+    )
+    return name, serial_number
 
 
 def _upsert_satellite_group(
@@ -301,7 +324,7 @@ def _normalize_group_row(row: Mapping[str, Any]) -> _NormalizedGroup | None:
     if not intl_designator:
         return None
 
-    rocket_name, rocket_serial_number = _split_rocket_name_and_serial(
+    rocket_name, rocket_serial_number = split_rocket_name_and_serial(
         _first_text(row, "运载火箭", "发射火箭")
     )
     return _NormalizedGroup(
@@ -416,24 +439,6 @@ def _parse_datetime(value: str | None) -> datetime | None:
     if len(time_part.split(":")) == 2:
         time_part = f"{time_part}:00"
     return datetime.fromisoformat(f"{match.group(1)} {time_part}")
-
-
-def _split_rocket_name_and_serial(value: str | None) -> tuple[str | None, str | None]:
-    cleaned = _clean_text(value)
-    if not cleaned:
-        return None, None
-
-    match = re.match(
-        r"^(?P<name>.+?)[\s（(]*(?P<serial>Y\s*\d+|遥\s*[\d零〇一二三四五六七八九十百]+)[）)]*$",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-    if not match:
-        return cleaned, None
-
-    name = match.group("name").strip()
-    serial = re.sub(r"\s+", "", match.group("serial").upper())
-    return name, serial
 
 
 def _mark_database_updated(database: DatabaseManager, updated_at: datetime) -> None:

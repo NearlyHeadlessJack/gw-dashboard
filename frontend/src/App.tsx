@@ -87,6 +87,7 @@ const OVERVIEW_MAP_DEFAULT_COLOR = '#2563eb'
 const HIGH_ORBIT_ALTITUDE_KM = 35_000
 const EARTH_RADIUS_KM = 6_371
 const COVERAGE_MIN_ELEVATION_DEG = 10
+const COVERAGE_MAX_INCLINATION_DEG = 85
 const COVERAGE_BOUNDARY_POINT_COUNT = 180
 const EXPORT_MAP_WIDTH = 1600
 const EXPORT_MAP_HEIGHT = 900
@@ -1100,7 +1101,9 @@ function OrbitSelectionMap({
 
       const latLng = pointToLatLng(position)
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
-      const coverageBoundary = generateCoverageBoundary(position)
+      const coverageBoundary = isCoverageSatellite(satellite)
+        ? generateCoverageBoundary(position)
+        : []
       if (coverageBoundary.length > 2) {
         L.polygon(coverageBoundary, {
           color,
@@ -2458,7 +2461,12 @@ function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: stri
 }
 
 function isCoverageSatellite(satellite: MapSatellitePoint): boolean {
-  return satellite.orbit_type !== 'geo' && !isHighOrbitSatellite(satellite)
+  const inclination = satellite.orbit.inclination_deg
+  return (
+    satellite.orbit_type !== 'geo' &&
+    !isHighOrbitSatellite(satellite) &&
+    (inclination === null || inclination <= COVERAGE_MAX_INCLINATION_DEG)
+  )
 }
 
 function isHighOrbitSatellite(satellite: MapSatellitePoint): boolean {

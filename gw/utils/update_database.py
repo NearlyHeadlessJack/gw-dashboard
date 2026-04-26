@@ -103,123 +103,128 @@ def update_satellite_database(
     tle_groups = [group for group in groups if group.satellite_count > 0]
     progress.tle_fetch_started(len(tle_groups))
     tle_group_index = 0
-    for group in groups:
-        if group.satellite_count <= 0:
+    try:
+        for group in groups:
+            if group.satellite_count <= 0:
+                logger.debug(
+                    "crawler skipping group %s: satellite_count=%s",
+                    group.intl_designator,
+                    group.satellite_count,
+                )
+                continue
+
+            tle_group_index += 1
             logger.debug(
-                "crawler skipping group %s: satellite_count=%s",
+                "crawler starting: fetching TLE for group=%s expected_satellites=%s",
                 group.intl_designator,
                 group.satellite_count,
             )
-            continue
-
-        tle_group_index += 1
-        logger.debug(
-            "crawler starting: fetching TLE for group=%s expected_satellites=%s",
-            group.intl_designator,
-            group.satellite_count,
-        )
-        progress.tle_group_started(
-            tle_group_index,
-            len(tle_groups),
-            group.intl_designator,
-        )
-        try:
-            parsed_tles = sorted(
-                group_tle_fetcher(group.intl_designator, group.satellite_count),
-                key=lambda item: DatabaseManager._intl_designator_sort_key(
-                    _satellite_intl_designator(item) or ""
-                ),
-            )
-        except Exception:
-            progress.tle_group_failed(
+            progress.tle_group_started(
                 tle_group_index,
                 len(tle_groups),
                 group.intl_designator,
             )
-            raise
-        progress.tle_group_finished(
-            tle_group_index,
-            len(tle_groups),
-            group.intl_designator,
-            len(parsed_tles),
-        )
-        logger.debug(
-            "crawler complete: group=%s tle_records=%s",
-            group.intl_designator,
-            len(parsed_tles),
-        )
-        if not parsed_tles:
-            continue
-
-        group_id = group_ids[group.intl_designator]
-        existing_satellites = {
-            satellite["intl_designator"]: satellite
-            for satellite in database.list_group_satellites(group_id)
-        }
-        group_first_tle_raw: str | None = None
-        valid_satellite_count = 0
-        invalid_satellite_count = 0
-
-        for parsed_tle in parsed_tles:
-            raw_tle = _raw_tle_from_parsed(parsed_tle)
-            satellite_intl_designator = _satellite_intl_designator(parsed_tle)
-            if not raw_tle or not satellite_intl_designator:
-                continue
-            if group_first_tle_raw is None:
-                group_first_tle_raw = raw_tle
-            status = _normalize_satellite_status(parsed_tle.get("status"))
-            if status == "有效":
-                valid_satellite_count += 1
-            else:
-                invalid_satellite_count += 1
-
-            epoch_at = parsed_tle.get("epoch_at")
-            if not isinstance(epoch_at, datetime):
-                epoch_at = now or datetime.now(timezone.utc)
-
-            existing = existing_satellites.get(satellite_intl_designator)
-            if existing:
-                database.update_group_satellite(
-                    group_id,
-                    existing["id"],
-                    epoch_at=epoch_at,
-                    status=status,
-                    raw_tle=raw_tle,
+            try:
+                parsed_tles = sorted(
+                    group_tle_fetcher(group.intl_designator, group.satellite_count),
+                    key=lambda item: DatabaseManager._intl_designator_sort_key(
+                        _satellite_intl_designator(item) or ""
+                    ),
                 )
-            else:
-                record_id = database.add_group_satellite(
-                    group_id,
-                    epoch_at=epoch_at,
-                    intl_designator=satellite_intl_designator,
-                    status=status,
-                    raw_tle=raw_tle,
+            except Exception:
+                progress.tle_group_failed(
+                    tle_group_index,
+                    len(tle_groups),
+                    group.intl_designator,
                 )
-                existing_satellites[satellite_intl_designator] = {
-                    "id": record_id,
-                    "intl_designator": satellite_intl_designator,
-                }
-            group_satellites_updated += 1
-
-            database.add_satellite_record(
-                satellite_intl_designator,
-                epoch_at=epoch_at,
-                raw_tle=raw_tle,
+                raise
+            progress.tle_group_finished(
+                tle_group_index,
+                len(tle_groups),
+                group.intl_designator,
+                len(parsed_tles),
             )
-            satellite_records_added += 1
+            logger.debug(
+                "crawler complete: group=%s tle_records=%s",
+                group.intl_designator,
+                len(parsed_tles),
+            )
+            if not parsed_tles:
+                continue
 
-        database.update_satellite_group(
-            group_id,
-            raw_tle=group_first_tle_raw,
-            valid_satellite_count=valid_satellite_count,
-            invalid_satellite_count=invalid_satellite_count,
-        )
-        logger.debug(
-            "data update group saved: group=%s valid=%s invalid=%s",
-            group.intl_designator,
-            valid_satellite_count,
-            invalid_satellite_count,
-        )
-    progress.tle_fetch_finished(len(tle_groups))
+            group_id = group_ids[group.intl_designator]
+            existing_satellites = {
+                satellite["intl_designator"]: satellite
+                for satellite in database.list_group_satellites(group_id)
+            }
+            group_first_tle_raw: str | None = None
+            valid_satellite_count = 0
+            invalid_satellite_count = 0
+
+            for parsed_tle in parsed_tles:
+                raw_tle = _raw_tle_from_parsed(parsed_tle)
+                satellite_intl_designator = _satellite_intl_designator(parsed_tle)
+                if not raw_tle or not satellite_intl_designator:
+                    continue
+                if group_first_tle_raw is None:
+                    group_first_tle_raw = raw_tle
+                status = _normalize_satellite_status(parsed_tle.get("status"))
+                if status == "有效":
+                    valid_satellite_count += 1
+                else:
+                    invalid_satellite_count += 1
+
+                epoch_at = parsed_tle.get("epoch_at")
+                if not isinstance(epoch_at, datetime):
+                    epoch_at = now or datetime.now(timezone.utc)
+
+                existing = existing_satellites.get(satellite_intl_designator)
+                if existing:
+                    database.update_group_satellite(
+                        group_id,
+                        existing["id"],
+                        epoch_at=epoch_at,
+                        status=status,
+                        raw_tle=raw_tle,
+                    )
+                else:
+                    record_id = database.add_group_satellite(
+                        group_id,
+                        epoch_at=epoch_at,
+                        intl_designator=satellite_intl_designator,
+                        status=status,
+                        raw_tle=raw_tle,
+                    )
+                    existing_satellites[satellite_intl_designator] = {
+                        "id": record_id,
+                        "intl_designator": satellite_intl_designator,
+                    }
+                group_satellites_updated += 1
+
+                database.add_satellite_record(
+                    satellite_intl_designator,
+                    epoch_at=epoch_at,
+                    raw_tle=raw_tle,
+                )
+                satellite_records_added += 1
+
+            database.update_satellite_group(
+                group_id,
+                raw_tle=group_first_tle_raw,
+                valid_satellite_count=valid_satellite_count,
+                invalid_satellite_count=invalid_satellite_count,
+            )
+            logger.debug(
+                "data update group saved: group=%s valid=%s invalid=%s",
+                group.intl_designator,
+                valid_satellite_count,
+                invalid_satellite_count,
+            )
+    except Exception:
+        progress.tle_fetch_failed(len(tle_groups))
+        raise
+    else:
+        progress.tle_fetch_finished(len(tle_groups))
 
     if update_metainfo:
         _mark_database_updated(database, now or datetime.now(timezone.utc))

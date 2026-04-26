@@ -472,6 +472,44 @@ def test_backend_runs_initial_update_before_frontend_entry(monkeypatch):
     assert events[:3] == ["first_run", "update", "frontend"]
 
 
+def test_backend_refuses_startup_when_initial_update_is_still_expired(monkeypatch):
+    db = DatabaseManager("sqlite3", ":memory:")
+    events = []
+    reporter = type(
+        "FakeProgressReporter",
+        (),
+        {"first_run_waiting": lambda self: events.append("first_run")},
+    )()
+
+    def fake_update(database, *, now, progress_reporter=None):
+        events.append("update")
+
+    monkeypatch.setattr(web_app, "update_satellite_database", fake_update)
+    monkeypatch.setattr(
+        web_app,
+        "log_frontend_entry",
+        lambda logger, config: events.append("frontend"),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "ConsoleUpdateProgressReporter",
+        lambda: reporter,
+    )
+
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        daemon=DaemonConfig(update_check_interval_seconds=3600),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+
+    with pytest.raises(RuntimeError, match="首次数据更新后数据仍不可用"):
+        with TestClient(web_app.create_app(config, database=db)):
+            pass
+
+    assert events == ["first_run", "update"]
+
+
 def test_backend_does_not_block_startup_update_when_data_was_updated(monkeypatch):
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()

@@ -156,3 +156,23 @@ def test_daemon_updates_initial_data_before_starting_runtime_services():
     assert daemon.is_alive() is False
     assert calls == ["update", "web", "frontend"]
     assert daemon.last_cycle_result == DaemonCycleResult(True, True, False)
+
+
+def test_daemon_does_not_start_runtime_services_when_initial_update_stays_expired():
+    calls = []
+    database = FakeDatabase([True, True])
+    daemon = DashboardDaemon(
+        make_config(interval=60),
+        database,
+        web_server_starter=lambda: calls.append("web"),
+        frontend_server_starter=lambda: calls.append("frontend"),
+        data_updater=lambda: calls.append("update"),
+    )
+
+    daemon.start()
+    daemon.join(timeout=1)
+
+    assert daemon.is_alive() is False
+    assert calls == ["update"]
+    assert isinstance(daemon.last_error, RuntimeError)
+    assert daemon.last_cycle_result == DaemonCycleResult(True, True, True)

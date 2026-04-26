@@ -323,6 +323,64 @@ def test_update_satellite_database_reports_terminal_progress(db):
     ]
 
 
+def test_update_satellite_database_reports_tle_progress_failure(db):
+    events = []
+
+    class ProgressReporter:
+        def launch_fetch_started(self):
+            events.append(("launch_started",))
+
+        def launch_fetch_finished(self, group_count):
+            events.append(("launch_finished", group_count))
+
+        def tle_fetch_started(self, total_groups):
+            events.append(("tle_started", total_groups))
+
+        def tle_group_started(self, index, total_groups, intl_designator):
+            events.append(("tle_group_started", index, total_groups, intl_designator))
+
+        def tle_group_finished(self, index, total_groups, intl_designator, tle_count):
+            events.append(
+                ("tle_group_finished", index, total_groups, intl_designator, tle_count)
+            )
+
+        def tle_group_failed(self, index, total_groups, intl_designator):
+            events.append(("tle_group_failed", index, total_groups, intl_designator))
+
+        def tle_fetch_finished(self, total_groups):
+            events.append(("tle_finished", total_groups))
+
+        def tle_fetch_failed(self, total_groups):
+            events.append(("tle_failed", total_groups))
+
+    def failing_group_tle_fetcher(intl_designator, satellite_count):
+        raise RuntimeError("tle unavailable")
+
+    with pytest.raises(RuntimeError, match="tle unavailable"):
+        update_satellite_database(
+            db,
+            huiji_group_fetcher=lambda: [
+                {
+                    "名称": "低轨01组A星",
+                    "COSPAR": "2024-240",
+                    "部署颗数": "1",
+                }
+            ],
+            group_tle_fetcher=failing_group_tle_fetcher,
+            update_metainfo=False,
+            progress_reporter=ProgressReporter(),
+        )
+
+    assert events == [
+        ("launch_started",),
+        ("launch_finished", 1),
+        ("tle_started", 1),
+        ("tle_group_started", 1, 1, "2024-240"),
+        ("tle_group_failed", 1, 1, "2024-240"),
+        ("tle_failed", 1),
+    ]
+
+
 def test_console_update_progress_reporter_outputs_first_run_and_tle_bar():
     stream = io.StringIO()
     reporter = ConsoleUpdateProgressReporter(stream=stream, bar_width=10)

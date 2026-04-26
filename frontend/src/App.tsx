@@ -426,9 +426,11 @@ function MapPage() {
 function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
-  const overlayLayerRef = useRef<L.LayerGroup | null>(null)
+  const trackLayerRef = useRef<L.LayerGroup | null>(null)
+  const markerLayerRef = useRef<L.LayerGroup | null>(null)
   const mapFittedRef = useRef(false)
   const [mapError, setMapError] = useState<string | null>(null)
+  const trackMinute = Math.floor(now.getTime() / 60_000)
   const tleKey =
     payload?.groups
       .map((group) => `${group.id}:${group.raw_tle}`)
@@ -460,14 +462,17 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
       .on('load', () => setMapError(null))
       .addTo(map)
 
-    const overlayLayer = L.layerGroup().addTo(map)
+    const trackLayer = L.layerGroup().addTo(map)
+    const markerLayer = L.layerGroup().addTo(map)
     mapRef.current = map
-    overlayLayerRef.current = overlayLayer
+    trackLayerRef.current = trackLayer
+    markerLayerRef.current = markerLayer
 
     return () => {
       map.remove()
       mapRef.current = null
-      overlayLayerRef.current = null
+      trackLayerRef.current = null
+      markerLayerRef.current = null
     }
   }, [])
 
@@ -476,36 +481,44 @@ function SatelliteMap({ payload, now }: { payload: MapPayload | null; now: Date 
   }, [tleKey])
 
   useEffect(() => {
-    const map = mapRef.current
-    const overlayLayer = overlayLayerRef.current
-    if (!map || !overlayLayer || !payload) return
+    const trackLayer = trackLayerRef.current
+    if (!trackLayer || !payload) return
 
-    overlayLayer.clearLayers()
-    const bounds = L.latLngBounds([])
-
-    let leoIndex = 0
-    payload.groups.forEach((group) => {
-      const position = propagateTlePosition(group.raw_tle, now)
-      if (!position) return
-
-      const color = LEO_TRACK_COLORS[leoIndex++ % LEO_TRACK_COLORS.length]
-      const track = generatePreviousOrbitTrack(group.raw_tle, now)
+    trackLayer.clearLayers()
+    const trackMoment = new Date(trackMinute * 60_000)
+    payload.groups.forEach((group, index) => {
+      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      const track = generatePreviousOrbitTrack(group.raw_tle, trackMoment)
       splitTrackByDateline(track).forEach((segment) => {
         L.polyline(segment, {
           color,
           opacity: 0.72,
           weight: 1.8,
           lineJoin: 'round',
-        }).addTo(overlayLayer)
+        }).addTo(trackLayer)
       })
+    })
+  }, [payload, trackMinute])
 
+  useEffect(() => {
+    const map = mapRef.current
+    const markerLayer = markerLayerRef.current
+    if (!map || !markerLayer || !payload) return
+
+    markerLayer.clearLayers()
+    const bounds = L.latLngBounds([])
+    payload.groups.forEach((group, index) => {
+      const position = propagateTlePosition(group.raw_tle, now)
+      if (!position) return
+
+      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
       const marker = L.circleMarker(pointToLatLng(position), {
         radius: 4,
         color: '#ffffff',
         weight: 1.3,
         fillColor: color,
         fillOpacity: 0.96,
-      }).addTo(overlayLayer)
+      }).addTo(markerLayer)
       marker.bindTooltip(
         `${group.name ?? group.intl_designator}<br>${mapTooltipIdentifier(group)}<br>${formatKm(group.orbit.perigee_km)} × ${formatKm(group.orbit.apogee_km)}`,
         { direction: 'top', offset: [0, -8] },

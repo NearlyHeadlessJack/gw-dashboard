@@ -16,7 +16,6 @@ database:
 backend:
   host: 0.0.0.0
   port: 9000
-  reload: true
   cors_origins:
     - http://localhost:5173
     - https://dashboard.example.com
@@ -39,7 +38,7 @@ scraper:
     assert config.database.connection == "database/gw.sqlite3"
     assert config.backend.host == "0.0.0.0"
     assert config.backend.port == 9000
-    assert config.backend.reload is True
+    assert config.backend.reload is False
     assert config.backend.cors_origins == [
         "http://localhost:5173",
         "https://dashboard.example.com",
@@ -188,6 +187,11 @@ def test_invalid_boolean_environment_value_raises_clear_error():
         )
 
 
+def test_reload_true_raises_clear_error():
+    with pytest.raises(ConfigError, match="backend.reload 当前入口暂不支持"):
+        load_config([], env={"GW_BACKEND_RELOAD": "true"})
+
+
 def test_config_from_env_returns_only_present_values():
     assert config_from_env({}) == {}
     assert config_from_env({"GW_FRONTEND_ORIGIN": "https://x.example"}) == {
@@ -203,3 +207,4 @@ def test_required_config_items_document_user_decisions():
         "database.connection" in item and "~/.gwtracking/database.db" in item
         for item in items
     )
+    assert any("backend.reload" in item and "不支持 true" in item for item in items)

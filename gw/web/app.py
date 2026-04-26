@@ -95,7 +95,9 @@ def create_app(
                     "database has no completed update; running initial crawler "
                     "update before web service startup"
                 )
-                daemon.prepare_initial_data()
+                initial_result = daemon.prepare_initial_data()
+                if initial_result.expired_after_update:
+                    raise RuntimeError("首次数据更新后数据仍不可用，Web 服务不会启动")
             logger.info(
                 "daemon launching in background: interval=%ss valid_duration=%ss "
                 "satellite_record_limit=%s",

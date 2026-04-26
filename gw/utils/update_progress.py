@@ -49,6 +49,9 @@ class UpdateProgressReporter(Protocol):
     def tle_fetch_finished(self, total_groups: int) -> None:
         """TLE 获取完成。"""
 
+    def tle_fetch_failed(self, total_groups: int) -> None:
+        """TLE 获取失败。"""
+
 
 class NullUpdateProgressReporter:
     """默认空进度回调。"""
@@ -88,6 +91,9 @@ class NullUpdateProgressReporter:
         pass
 
     def tle_fetch_finished(self, total_groups: int) -> None:
+        pass
+
+    def tle_fetch_failed(self, total_groups: int) -> None:
         pass
 
 
@@ -153,13 +159,17 @@ class ConsoleUpdateProgressReporter:
         total_groups: int,
         intl_designator: str,
     ) -> None:
-        self._stop_progress()
-        self._write_line("TLE 数据获取失败")
+        pass
 
     def tle_fetch_finished(self, total_groups: int) -> None:
         if total_groups > 0:
             self._stop_progress()
             self._write_line("TLE 数据获取完成")
+
+    def tle_fetch_failed(self, total_groups: int) -> None:
+        if total_groups > 0:
+            self._stop_progress()
+            self._write_line("TLE 数据获取失败")
 
     def _stop_progress(self) -> None:
         if self._progress is not None:

@@ -23,7 +23,7 @@ REQUIRED_CONFIG_ITEMS = [
     "database.connection: 默认 ~/.gwtracking/database.db；sqlite3 文件路径，或 mysql/pgsql SQLAlchemy URL/dict",
     "backend.host: 后端 web 服务监听地址，默认 127.0.0.1",
     "backend.port: 后端 web 服务监听端口，默认 8000",
-    "backend.reload: 后端开发热重载开关，默认 false",
+    "backend.reload: 默认 false；当前入口暂不支持 true",
     "backend.cors_origins: 允许访问后端 API 的前端来源列表",
     "backend.cache_ttl_seconds: web API 缓存时间，默认 30",
     "frontend.origin: 前端页面来源，默认 http://localhost:5173",
@@ -79,10 +79,13 @@ class BackendConfig:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "BackendConfig":
+        reload = _as_bool(data.get("reload", cls.reload), "backend.reload")
+        if reload:
+            raise ConfigError("backend.reload 当前入口暂不支持 true，请保持 false")
         return cls(
             host=str(data.get("host", cls.host)),
             port=_as_int(data.get("port", cls.port), "backend.port"),
-            reload=_as_bool(data.get("reload", cls.reload), "backend.reload"),
+            reload=reload,
             cors_origins=_as_str_list(
                 data.get("cors_origins", ["http://localhost:5173"]),
                 "backend.cors_origins",

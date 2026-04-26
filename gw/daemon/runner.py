@@ -76,7 +76,9 @@ class DashboardDaemon(threading.Thread):
         )
         try:
             if not self._initial_data_prepared:
-                self.prepare_initial_data()
+                result = self.prepare_initial_data()
+                if result.expired_after_update:
+                    raise RuntimeError("首次数据更新后数据仍不可用")
             self.start_runtime_services()
         except Exception as exc:
             self.last_error = exc
@@ -100,7 +102,7 @@ class DashboardDaemon(threading.Thread):
         logger.info("daemon initial data preparation starting")
         result = self.run_cycle()
         self.last_cycle_result = result
-        self._initial_data_prepared = True
+        self._initial_data_prepared = not result.expired_after_update
         logger.info(
             "daemon initial data preparation complete: update_ran=%s "
             "expired_after_update=%s",

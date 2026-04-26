@@ -10,6 +10,9 @@ from gw.utils.rocket import split_rocket_name_and_serial
 
 
 Row = dict[str, Any]
+SERVER_VALID_DURATION_MIN_SECONDS = 3_600
+SERVER_VALID_DURATION_MAX_SECONDS = 172_800
+SERVER_VALID_DURATION_RANGE_MESSAGE = "数据有效期必须在 1 到 48 小时之间"
 
 
 def build_dashboard(database: DatabaseManager) -> Row:
@@ -113,8 +116,12 @@ def update_server_status(
     valid_duration_seconds: int,
 ) -> Row:
     """更新服务器数据有效期设置。"""
-    if valid_duration_seconds < 0:
-        raise DatabaseConfigurationError("数据有效期不能为负数")
+    if not (
+        SERVER_VALID_DURATION_MIN_SECONDS
+        <= valid_duration_seconds
+        <= SERVER_VALID_DURATION_MAX_SECONDS
+    ):
+        raise DatabaseConfigurationError(SERVER_VALID_DURATION_RANGE_MESSAGE)
 
     metainfo = database.get_metainfo()
     if metainfo is None:

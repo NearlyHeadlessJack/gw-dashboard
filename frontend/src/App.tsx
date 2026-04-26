@@ -91,6 +91,8 @@ const EXPORT_MAP_ZOOM = 2
 const EXPORT_MERCATOR_MAX_LAT = 85.05112878
 const PROJECT_GITHUB_URL = 'https://github.com/NearlyHeadlessJack/gw-dashboard'
 const CLOCK_SYNC_INTERVAL_MS = 5 * 60_000
+const SERVER_VALID_DURATION_MIN_HOURS = 1
+const SERVER_VALID_DURATION_MAX_HOURS = 48
 let sharedClockOffsetMs = 0
 let lastClockSyncAtMs = 0
 let clockSyncPromise: Promise<number> | null = null
@@ -527,9 +529,10 @@ function ServerStatusPage() {
     const validDurationHours = Number(validDurationInput)
     if (
       !Number.isFinite(validDurationHours) ||
-      validDurationHours < 0
+      validDurationHours < SERVER_VALID_DURATION_MIN_HOURS ||
+      validDurationHours > SERVER_VALID_DURATION_MAX_HOURS
     ) {
-      setSaveError('有效期必须是非负小时数')
+      setSaveError('有效期必须在 1 到 48 小时之间')
       setSaveMessage(null)
       return
     }
@@ -579,7 +582,8 @@ function ServerStatusPage() {
               <span>有效期（小时）</span>
               <input
                 type="number"
-                min="0"
+                min={SERVER_VALID_DURATION_MIN_HOURS}
+                max={SERVER_VALID_DURATION_MAX_HOURS}
                 step="1"
                 value={validDurationInput}
                 onChange={(event) => setValidDurationInput(event.target.value)}

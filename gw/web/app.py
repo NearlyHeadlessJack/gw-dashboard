@@ -174,9 +174,6 @@ def create_app(
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="数据有效期必须是整数秒") from exc
 
-        if valid_duration_seconds < 0:
-            raise HTTPException(status_code=400, detail="数据有效期不能为负数")
-
         app.state.cache.clear()
         return _handle_database_errors(
             lambda: update_server_status(

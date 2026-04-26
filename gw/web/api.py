@@ -20,10 +20,7 @@ def build_dashboard(database: DatabaseManager) -> Row:
         "summary": _build_summary(database, groups, satellites),
         "recent_satellites": _recent_satellites(satellites, limit=10),
         "recent_launches": _recent_launches(groups, limit=8),
-        "manufacturers": _statistics_rows(
-            database.list_manufacturers(),
-            primary_sort_key="satellite_count",
-        ),
+        "manufacturers": _manufacturer_statistics_rows(database.list_manufacturers()),
         "rockets": _rocket_statistics_rows(database.list_rockets()),
     }
 
@@ -238,6 +235,39 @@ def _statistics_rows(rows: list[Row], *, primary_sort_key: str) -> list[Row]:
     )
 
 
+def _manufacturer_statistics_rows(rows: list[Row]) -> list[Row]:
+    aggregates: dict[str, Row] = {}
+    for row in rows:
+        name = _public_manufacturer_name(row.get("name"))
+        if not name:
+            continue
+
+        item = aggregates.setdefault(
+            name,
+            {
+                "id": row.get("id"),
+                "name": name,
+                "group_count": 0,
+                "satellite_count": 0,
+            },
+        )
+        row_id = _int(row.get("id"))
+        current_id = _int(item.get("id"))
+        if row_id and (not current_id or row_id < current_id):
+            item["id"] = row_id
+        item["group_count"] = _int(item.get("group_count")) + _int(
+            row.get("group_count")
+        )
+        item["satellite_count"] = _int(item.get("satellite_count")) + _int(
+            row.get("satellite_count")
+        )
+
+    return _statistics_rows(
+        list(aggregates.values()),
+        primary_sort_key="satellite_count",
+    )
+
+
 def _rocket_statistics_rows(rows: list[Row]) -> list[Row]:
     aggregates: dict[str, Row] = {}
     for row in rows:
@@ -285,7 +315,7 @@ def _public_group(row: Row) -> Row:
         "rocket_name": row.get("rocket_name"),
         "rocket_serial_number": row.get("rocket_serial_number"),
         "manufacturer_id": row.get("manufacturer_id"),
-        "manufacturer_name": row.get("manufacturer_name"),
+        "manufacturer_name": _public_manufacturer_name(row.get("manufacturer_name")),
         "satellite_count": _int(row.get("satellite_count")),
         "valid_satellite_count": _int(row.get("valid_satellite_count")),
         "invalid_satellite_count": _int(row.get("invalid_satellite_count")),
@@ -301,7 +331,7 @@ def _public_launch(row: Row) -> Row:
         "launch_site": row.get("launch_site"),
         "rocket_name": row.get("rocket_name"),
         "rocket_serial_number": row.get("rocket_serial_number"),
-        "manufacturer_name": row.get("manufacturer_name"),
+        "manufacturer_name": _public_manufacturer_name(row.get("manufacturer_name")),
         "satellite_count": _int(row.get("satellite_count")),
         "orbit": _orbit(row),
     }
@@ -320,10 +350,17 @@ def _public_satellite(row: Row, *, group: Row) -> Row:
         "launch_site": group.get("launch_site"),
         "rocket_name": group.get("rocket_name"),
         "rocket_serial_number": group.get("rocket_serial_number"),
-        "manufacturer_name": group.get("manufacturer_name"),
+        "manufacturer_name": _public_manufacturer_name(group.get("manufacturer_name")),
         "orbit": _orbit(row),
         "raw_tle": row.get("raw_tle"),
     }
+
+
+def _public_manufacturer_name(value: Any) -> str | None:
+    if value is None:
+        return None
+    name = str(value).strip()
+    return "航天五院" if name == "五院" else name
 
 
 def _history_point(row: Row) -> Row:

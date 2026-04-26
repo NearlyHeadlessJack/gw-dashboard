@@ -112,11 +112,44 @@ def test_dashboard_api_returns_overview(client):
     assert payload["summary"]["invalid_satellites"] == 1
     assert payload["summary"]["tracked_satellites"] == 2
     assert payload["recent_satellites"][0]["group_name"] == "低轨01组"
+    assert payload["recent_satellites"][0]["manufacturer_name"] == "航天五院"
     assert payload["recent_launches"][0]["rocket_name"] == "长征六号改"
-    assert payload["recent_launches"][0]["manufacturer_name"] == "五院"
-    assert payload["manufacturers"][0]["name"] == "五院"
+    assert payload["recent_launches"][0]["manufacturer_name"] == "航天五院"
+    assert payload["manufacturers"][0]["name"] == "航天五院"
     assert payload["rockets"][0]["name"] == "长征六号改"
     assert payload["rockets"][0]["serial_number"] is None
+
+
+def test_api_renames_wuyuan_manufacturer_for_frontend(client):
+    groups = client.get("/api/groups").json()
+    satellites = client.get("/api/satellites").json()
+
+    assert groups[0]["manufacturer_name"] == "航天五院"
+    assert satellites[0]["manufacturer_name"] == "航天五院"
+
+
+def test_dashboard_manufacturer_stats_merge_wuyuan_aliases():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.create_manufacturer("五院", group_count=1, satellite_count=2)
+    db.create_manufacturer("航天五院", group_count=3, satellite_count=4)
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    stats_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    manufacturers = stats_client.get("/api/dashboard").json()["manufacturers"]
+
+    assert manufacturers == [
+        {
+            "id": 1,
+            "name": "航天五院",
+            "group_count": 4,
+            "satellite_count": 6,
+        }
+    ]
 
 
 def test_launches_api_returns_all_launches_newest_first():
@@ -145,7 +178,7 @@ def test_launches_api_returns_all_launches_newest_first():
     launches = launches_response.json()
     assert len(launches) == 9
     assert launches[0]["intl_designator"] == "2026-009"
-    assert launches[0]["manufacturer_name"] == "五院"
+    assert launches[0]["manufacturer_name"] == "航天五院"
     assert launches[-1]["intl_designator"] == "2026-001"
     assert len(dashboard_response.json()["recent_launches"]) == 8
 

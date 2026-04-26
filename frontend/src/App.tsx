@@ -636,7 +636,7 @@ function MapPage() {
             checked={showCoverage}
             onChange={(event) => setShowCoverage(event.target.checked)}
           />
-          <span>覆盖范围</span>
+          <span>LEO覆盖范围</span>
         </label>
         <button
           className="icon-button"

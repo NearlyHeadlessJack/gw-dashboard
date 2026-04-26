@@ -1550,10 +1550,11 @@ function formatShortDate(value: string | null): string {
 }
 
 function formatTime(value: string | null | undefined): string {
-  if (!value) return '--:--:--'
+  if (!value) return '---- -- -- --:--:--Z'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '--:--:--'
-  return date.toISOString().slice(11, 19)
+  if (Number.isNaN(date.getTime())) return '---- -- -- --:--:--Z'
+  const iso = date.toISOString()
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)}Z`
 }
 
 function rocketName(

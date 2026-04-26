@@ -89,6 +89,15 @@ const EARTH_RADIUS_KM = 6_371
 const COVERAGE_MIN_ELEVATION_DEG = 30
 const COVERAGE_MAX_INCLINATION_DEG = 83
 const COVERAGE_BOUNDARY_POINT_COUNT = 180
+const OVERVIEW_MAP_ZOOM = 2
+const OVERVIEW_MAP_DEFAULT_CENTER: L.LatLngTuple = [30, 0]
+const OVERVIEW_MAP_CHINA_BOUNDS = {
+  north: 53.6,
+  south: 18.1,
+  west: 73.5,
+  east: 135.1,
+}
+const OVERVIEW_MAP_CHINA_PADDING_PX = 12
 const EXPORT_MAP_WIDTH = 1600
 const EXPORT_MAP_HEIGHT = 900
 const EXPORT_MAP_ZOOM = 2
@@ -926,11 +935,12 @@ function OverviewPointMap({
       return
     }
 
-    const map = L.map(containerRef.current, {
-      center: [30, 0],
-      zoom: 2,
-      minZoom: 2,
-      maxZoom: 2,
+    const container = containerRef.current
+    const map = L.map(container, {
+      center: OVERVIEW_MAP_DEFAULT_CENTER,
+      zoom: OVERVIEW_MAP_ZOOM,
+      minZoom: OVERVIEW_MAP_ZOOM,
+      maxZoom: OVERVIEW_MAP_ZOOM,
       worldCopyJump: true,
       zoomControl: false,
       dragging: false,
@@ -944,8 +954,8 @@ function OverviewPointMap({
     map.attributionControl.setPrefix(false)
     L.tileLayer(GAODE_STANDARD_TILE_URL, {
       subdomains: ['1', '2', '3', '4'],
-      minZoom: 2,
-      maxZoom: 2,
+      minZoom: OVERVIEW_MAP_ZOOM,
+      maxZoom: OVERVIEW_MAP_ZOOM,
       attribution: '© 高德地图',
     })
       .on('tileerror', () => setMapError('高德标准瓦片加载失败'))
@@ -955,8 +965,22 @@ function OverviewPointMap({
     const overlayLayer = L.layerGroup().addTo(map)
     mapRef.current = map
     overlayLayerRef.current = overlayLayer
+    const syncView = () => {
+      map.invalidateSize()
+      syncOverviewMapView(map)
+    }
+    syncView()
+
+    let resizeObserver: ResizeObserver | null = null
+    if ('ResizeObserver' in window) {
+      resizeObserver = new ResizeObserver(syncView)
+      resizeObserver.observe(container)
+    }
+    window.addEventListener('resize', syncView)
 
     return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', syncView)
       map.remove()
       mapRef.current = null
       overlayLayerRef.current = null
@@ -2097,6 +2121,43 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click()
   link.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function syncOverviewMapView(map: L.Map) {
+  const size = map.getSize()
+  if (size.x <= 0 || size.y <= 0) return
+
+  const zoom = OVERVIEW_MAP_ZOOM
+  const defaultCenter = map.project(OVERVIEW_MAP_DEFAULT_CENTER, zoom)
+  const northWest = map.project(
+    [OVERVIEW_MAP_CHINA_BOUNDS.north, OVERVIEW_MAP_CHINA_BOUNDS.west],
+    zoom,
+  )
+  const southEast = map.project(
+    [OVERVIEW_MAP_CHINA_BOUNDS.south, OVERVIEW_MAP_CHINA_BOUNDS.east],
+    zoom,
+  )
+  const halfWidth = Math.max(0, size.x / 2 - OVERVIEW_MAP_CHINA_PADDING_PX)
+  const halfHeight = Math.max(0, size.y / 2 - OVERVIEW_MAP_CHINA_PADDING_PX)
+  const centerPoint = L.point(
+    clampCenterAxis(
+      defaultCenter.x,
+      southEast.x - halfWidth,
+      northWest.x + halfWidth,
+    ),
+    clampCenterAxis(
+      defaultCenter.y,
+      southEast.y - halfHeight,
+      northWest.y + halfHeight,
+    ),
+  )
+
+  map.setView(map.unproject(centerPoint, zoom), zoom, { animate: false })
+}
+
+function clampCenterAxis(value: number, min: number, max: number): number {
+  if (min > max) return (min + max) / 2
+  return clamp(value, min, max)
 }
 
 function generateCoverageBoundary(point: GeoPoint): L.LatLngTuple[] {

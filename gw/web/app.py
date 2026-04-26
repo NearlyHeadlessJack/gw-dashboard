@@ -31,6 +31,12 @@ from gw.web.api import (
     list_satellites,
 )
 from gw.web.runtime import log_frontend_entry
+from gw.web.time_service import (
+    NtpTimeError,
+    NtpTimeService,
+    TimeService,
+    ntp_snapshot_to_payload,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +69,7 @@ def create_app(
     config: AppConfig | None = None,
     *,
     database: DatabaseManager | None = None,
+    time_service: TimeService | None = None,
     start_daemon: bool = True,
     log_frontend_on_startup: bool = True,
 ) -> FastAPI:
@@ -77,6 +84,7 @@ def create_app(
     needs_initial_update = _needs_initial_data_update(db)
     _ensure_metainfo_defaults(db, app_config)
     cache = TtlCache()
+    ntp_time_service = time_service or NtpTimeService()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -127,6 +135,7 @@ def create_app(
     app.state.config = app_config
     app.state.database = db
     app.state.cache = cache
+    app.state.time_service = ntp_time_service
 
     app.add_middleware(
         CORSMiddleware,
@@ -143,6 +152,13 @@ def create_app(
             "database": db.test_connection(),
             "cache_ttl_seconds": app_config.backend.cache_ttl_seconds,
         }
+
+    @app.get("/api/time")
+    def standard_time() -> dict[str, object]:
+        try:
+            return ntp_snapshot_to_payload(ntp_time_service.current_time())
+        except NtpTimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/dashboard")
     def dashboard() -> Any:

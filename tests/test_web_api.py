@@ -14,6 +14,7 @@ from gw.config import (
 from gw.database import DatabaseManager
 from gw.web import app as web_app
 from gw.web.app import create_app
+from gw.web.time_service import NtpTimeError, NtpTimeSnapshot
 
 
 RAW_TLE_A = """\
@@ -39,6 +40,26 @@ SSO TEST
 1 62323U 24240A   26115.49220466  .00000041  00000+0  60880-4 0  9996
 2 62323  97.5000   1.0150 0001837  72.4834 287.6500 14.24413432 65663
 """
+
+
+class StaticTimeService:
+    def __init__(self, snapshot: NtpTimeSnapshot | None = None) -> None:
+        self.snapshot = snapshot or NtpTimeSnapshot(
+            utc=datetime(2026, 4, 26, 12, 0, tzinfo=timezone.utc),
+            server="ntp2.aliyun.com",
+            offset_seconds=0.125,
+            round_trip_seconds=0.02,
+            synced_at=datetime(2026, 4, 26, 11, 59, 59, tzinfo=timezone.utc),
+            cached=False,
+        )
+
+    def current_time(self) -> NtpTimeSnapshot:
+        return self.snapshot
+
+
+class FailingTimeService:
+    def current_time(self) -> NtpTimeSnapshot:
+        raise NtpTimeError("无法从 ntp2.aliyun.com 获取标准时间")
 
 
 @pytest.fixture
@@ -118,6 +139,61 @@ def test_dashboard_api_returns_overview(client):
     assert payload["manufacturers"][0]["name"] == "航天五院"
     assert payload["rockets"][0]["name"] == "长征六号改"
     assert payload["rockets"][0]["serial_number"] is None
+
+
+def test_time_api_returns_ntp_time():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    time_client = TestClient(
+        create_app(
+            config,
+            database=db,
+            time_service=StaticTimeService(),
+            start_daemon=False,
+        )
+    )
+
+    response = time_client.get("/api/time")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {
+        "utc_time": "2026-04-26T12:00:00.000Z",
+        "source": "ntp",
+        "server": "ntp2.aliyun.com",
+        "offset_seconds": 0.125,
+        "round_trip_seconds": 0.02,
+        "synced_at": "2026-04-26T11:59:59.000Z",
+        "cached": False,
+    }
+
+
+def test_time_api_returns_503_when_ntp_time_unavailable():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    time_client = TestClient(
+        create_app(
+            config,
+            database=db,
+            time_service=FailingTimeService(),
+            start_daemon=False,
+        )
+    )
+
+    response = time_client.get("/api/time")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "无法从 ntp2.aliyun.com 获取标准时间"
 
 
 def test_api_renames_wuyuan_manufacturer_for_frontend(client):

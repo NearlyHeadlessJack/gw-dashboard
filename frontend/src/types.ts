@@ -65,6 +65,16 @@ export type DashboardData = {
   rockets: RocketStat[]
 }
 
+export type TimePayload = {
+  utc_time: string
+  source: 'ntp'
+  server: string
+  offset_seconds: number
+  round_trip_seconds: number | null
+  synced_at: string
+  cached: boolean
+}
+
 export type GroupSummary = {
   id: number
   name: string

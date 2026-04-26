@@ -39,7 +39,7 @@ import {
   Waypoints,
   X,
 } from 'lucide-react'
-import { useApi } from './api'
+import { fetchApi, useApi } from './api'
 import { generatePreviousOrbitTrack, propagateTlePosition } from './orbit'
 import type {
   DashboardData,
@@ -53,6 +53,7 @@ import type {
   OrbitSummary,
   RocketStat,
   SatellitePreview,
+  TimePayload,
 } from './types'
 import './App.css'
 
@@ -86,6 +87,10 @@ const EXPORT_MAP_HEIGHT = 900
 const EXPORT_MAP_ZOOM = 2
 const EXPORT_MERCATOR_MAX_LAT = 85.05112878
 const PROJECT_GITHUB_URL = 'https://github.com/NearlyHeadlessJack/gw-dashboard'
+const CLOCK_SYNC_INTERVAL_MS = 5 * 60_000
+let sharedClockOffsetMs = 0
+let lastClockSyncAtMs = 0
+let clockSyncPromise: Promise<number> | null = null
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -95,12 +100,70 @@ const DASHBOARD_MENU: MenuItem[] = [
 ]
 
 function useClock() {
-  const [now, setNow] = useState(() => new Date())
+  const [now, setNow] = useState(() => new Date(Date.now() + sharedClockOffsetMs))
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(id)
+    let mounted = true
+    const tick = () => setNow(new Date(Date.now() + sharedClockOffsetMs))
+    const sync = () => {
+      syncClockOffset()
+        .then((offsetMs) => {
+          if (mounted) {
+            setNow(new Date(Date.now() + offsetMs))
+          }
+        })
+        .catch(() => {
+          if (mounted) {
+            tick()
+          }
+        })
+    }
+
+    sync()
+    const tickId = window.setInterval(tick, 1000)
+    const syncId = window.setInterval(sync, CLOCK_SYNC_INTERVAL_MS)
+    return () => {
+      mounted = false
+      window.clearInterval(tickId)
+      window.clearInterval(syncId)
+    }
   }, [])
   return now
+}
+
+async function syncClockOffset(): Promise<number> {
+  const currentMs = Date.now()
+  if (
+    lastClockSyncAtMs > 0 &&
+    currentMs - lastClockSyncAtMs < CLOCK_SYNC_INTERVAL_MS
+  ) {
+    return sharedClockOffsetMs
+  }
+  if (clockSyncPromise) {
+    return clockSyncPromise
+  }
+
+  clockSyncPromise = fetchClockOffset()
+    .then((offsetMs) => {
+      sharedClockOffsetMs = offsetMs
+      lastClockSyncAtMs = Date.now()
+      return offsetMs
+    })
+    .finally(() => {
+      clockSyncPromise = null
+    })
+  return clockSyncPromise
+}
+
+async function fetchClockOffset(): Promise<number> {
+  const requestStartedAt = Date.now()
+  const payload = await fetchApi<TimePayload>('/api/time')
+  const requestFinishedAt = Date.now()
+  const standardTimeMs = Date.parse(payload.utc_time)
+  if (Number.isNaN(standardTimeMs)) {
+    throw new Error('Invalid standard time')
+  }
+  const localMidpointMs = (requestStartedAt + requestFinishedAt) / 2
+  return standardTimeMs - localMidpointMs
 }
 
 function DashboardLayout() {

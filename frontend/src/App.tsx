@@ -518,21 +518,22 @@ function ServerStatusPage() {
 
   useEffect(() => {
     if (data) {
-      setValidDurationInput(String(data.valid_duration_seconds))
+      setValidDurationInput(formatDurationHoursInput(data.valid_duration_seconds))
     }
   }, [data])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const validDurationSeconds = Number(validDurationInput)
+    const validDurationHours = Number(validDurationInput)
     if (
-      !Number.isInteger(validDurationSeconds) ||
-      validDurationSeconds < 0
+      !Number.isFinite(validDurationHours) ||
+      validDurationHours < 0
     ) {
-      setSaveError('有效期必须是非负整数秒')
+      setSaveError('有效期必须是非负小时数')
       setSaveMessage(null)
       return
     }
+    const validDurationSeconds = Math.round(validDurationHours * 3_600)
 
     setSaving(true)
     setSaveError(null)
@@ -545,7 +546,7 @@ function ServerStatusPage() {
           valid_duration_seconds: validDurationSeconds,
         }),
       })
-      setValidDurationInput(String(updated.valid_duration_seconds))
+      setValidDurationInput(formatDurationHoursInput(updated.valid_duration_seconds))
       setSaveMessage('已保存')
       setRefreshKey((value) => value + 1)
     } catch (error) {
@@ -575,11 +576,11 @@ function ServerStatusPage() {
         <Panel className="span-6" title="数据有效期" icon={Clock}>
           <form className="settings-form" onSubmit={handleSubmit}>
             <label className="field">
-              <span>有效期（秒）</span>
+              <span>有效期（小时）</span>
               <input
                 type="number"
                 min="0"
-                step="60"
+                step="1"
                 value={validDurationInput}
                 onChange={(event) => setValidDurationInput(event.target.value)}
               />
@@ -2070,6 +2071,11 @@ function formatDurationSeconds(value: number): string {
   if (value % 3_600 === 0) return `${formatNumber(value / 3_600)} 小时`
   if (value % 60 === 0) return `${formatNumber(value / 60)} 分钟`
   return `${formatNumber(value)} 秒`
+}
+
+function formatDurationHoursInput(value: number): string {
+  const hours = value / 3_600
+  return Number.isInteger(hours) ? String(hours) : String(Number(hours.toFixed(2)))
 }
 
 function formatKm(value: number | null): string {

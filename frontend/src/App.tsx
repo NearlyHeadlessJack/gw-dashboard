@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import {
   BrowserRouter,
+  Link,
   Navigate,
   NavLink,
   Route,
   Routes,
+  useSearchParams,
 } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -206,7 +208,7 @@ function OverviewPage() {
           icon={Orbit}
           meta={formatDateTime(data.summary.last_updated_at)}
         >
-          <RecentSatellitesTable satellites={satellites} scrollable />
+          <RecentSatellitesTable satellites={satellites} scrollable linkGroups />
         </Panel>
         <Panel
           className="span-5"
@@ -243,9 +245,10 @@ function OverviewPage() {
 
 function OrbitExplorerPage() {
   const { data: groups, loading, error } = useApi<GroupSummary[]>('/api/groups')
-  const [groupIntl, setGroupIntl] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [satelliteIntl, setSatelliteIntl] = useState('')
-  const selectedGroupIntl = groupIntl || groups?.[0]?.intl_designator || ''
+  const requestedGroupIntl = searchParams.get('group') || ''
+  const selectedGroupIntl = requestedGroupIntl || groups?.[0]?.intl_designator || ''
 
   const detailPath = selectedGroupIntl ? `/api/groups/${selectedGroupIntl}` : null
   const { data: detail, loading: detailLoading } = useApi<GroupDetail>(detailPath)
@@ -266,10 +269,10 @@ function OrbitExplorerPage() {
       <SelectorPanel
         groups={groups}
         selectedGroup={selectedGroupIntl}
-        selectedSatellite={satelliteIntl}
+        selectedSatellite={selectedSatellite?.intl_designator ?? ''}
         satellites={detail?.satellites ?? []}
         onGroupChange={(value) => {
-          setGroupIntl(value)
+          setSearchParams(value ? { group: value } : {})
           setSatelliteIntl('')
         }}
         onSatelliteChange={setSatelliteIntl}
@@ -910,9 +913,11 @@ function HistoryChart({ points }: { points: HistoryPoint[] }) {
 function RecentSatellitesTable({
   satellites,
   scrollable = false,
+  linkGroups = false,
 }: {
   satellites: SatellitePreview[]
   scrollable?: boolean
+  linkGroups?: boolean
 }) {
   if (satellites.length === 0) return <EmptyState label="暂无卫星数据" compact />
   return (
@@ -932,8 +937,30 @@ function RecentSatellitesTable({
         <tbody>
           {satellites.map((satellite) => (
             <tr key={`${satellite.group_intl_designator}-${satellite.intl_designator}`}>
-              <td className="mono">{satellite.intl_designator}</td>
-              <td>{satellite.group_name ?? '-'}</td>
+              <td className="mono">
+                {linkGroups && satellite.group_intl_designator ? (
+                  <Link
+                    className="inline-link mono-link"
+                    to={groupExplorerPath(satellite.group_intl_designator)}
+                  >
+                    {satellite.intl_designator}
+                  </Link>
+                ) : (
+                  satellite.intl_designator
+                )}
+              </td>
+              <td>
+                {linkGroups && satellite.group_intl_designator ? (
+                  <Link
+                    className="inline-link"
+                    to={groupExplorerPath(satellite.group_intl_designator)}
+                  >
+                    {satellite.group_name ?? satellite.group_intl_designator}
+                  </Link>
+                ) : (
+                  satellite.group_name ?? '-'
+                )}
+              </td>
               <td>{formatDegree(satellite.orbit.inclination_deg)}</td>
               <td>{formatKm(satellite.orbit.perigee_km)}</td>
               <td>{formatKm(satellite.orbit.apogee_km)}</td>
@@ -1022,7 +1049,11 @@ function LaunchList({
       {launches.map((launch) => (
         <div key={launch.intl_designator} className="launch-item">
           <div>
-            <strong>{launch.name ?? launch.intl_designator}</strong>
+            <strong>
+              <Link className="inline-link" to={groupExplorerPath(launch.intl_designator)}>
+                {launch.name ?? launch.intl_designator}
+              </Link>
+            </strong>
             <span>{formatLaunchDateTime(launch.launch_time)}</span>
           </div>
           <small>{rocketName(launch)}</small>
@@ -1379,6 +1410,10 @@ function rocketName(
 
 function rocketLabel(rocket: RocketStat): string {
   return rocket.name
+}
+
+function groupExplorerPath(intlDesignator: string): string {
+  return `/dashboard/orbits?group=${encodeURIComponent(intlDesignator)}`
 }
 
 function orbitSentence(orbit: OrbitSummary): string {

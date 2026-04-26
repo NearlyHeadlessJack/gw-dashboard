@@ -8,6 +8,8 @@ from typing import Any
 
 from sgp4.api import Satrec, jday
 
+from gw.utils.tle import TleParseError, parse_tle
+
 
 EARTH_EQUATORIAL_RADIUS_KM = 6378.137
 EARTH_FLATTENING = 1 / 298.257223563
@@ -29,17 +31,7 @@ def propagate_tle_position(
     moment = _normalize_datetime(at)
     line1, line2 = _extract_tle_lines(raw_tle)
     satellite = Satrec.twoline2rv(line1, line2)
-    jd, fraction = _julian_day(moment)
-    error_code, position_km, _velocity_km_s = satellite.sgp4(jd, fraction)
-    if error_code != 0:
-        raise OrbitPropagationError(f"SGP4 传播失败，错误码: {error_code}")
-
-    latitude, longitude, altitude = _teme_to_geodetic(position_km, jd + fraction)
-    return {
-        "latitude": round(latitude, 6),
-        "longitude": round(longitude, 6),
-        "altitude_km": round(altitude, 3),
-    }
+    return _propagate_satellite_position(satellite, moment)
 
 
 def generate_ground_track(
@@ -62,12 +54,70 @@ def generate_ground_track(
     point_count = total_minutes // step_minutes + 1
 
     points: list[dict[str, float]] = []
+    satellite = _satellite_from_raw_tle(raw_tle)
     for index in range(point_count):
         moment = start + timedelta(minutes=index * step_minutes)
-        point = propagate_tle_position(raw_tle, moment)
+        point = _propagate_satellite_position(satellite, moment)
         point["timestamp"] = moment.isoformat().replace("+00:00", "Z")
         points.append(point)
     return points
+
+
+def generate_previous_orbit_ground_track(
+    raw_tle: str,
+    at: datetime | None = None,
+    *,
+    point_count: int = 600,
+) -> list[dict[str, float]]:
+    """生成从指定时刻往前一个轨道周期到当前时刻的地面轨迹。"""
+    if point_count < 2:
+        raise OrbitPropagationError("轨迹点数量必须至少为 2")
+
+    center = _normalize_datetime(at)
+    period_minutes = _orbital_period_minutes(raw_tle)
+    period_seconds = period_minutes * 60
+    start = center - timedelta(seconds=period_seconds)
+    satellite = _satellite_from_raw_tle(raw_tle)
+
+    points: list[dict[str, float]] = []
+    for index in range(point_count + 1):
+        moment = start + timedelta(seconds=period_seconds * index / point_count)
+        point = _propagate_satellite_position(satellite, moment)
+        point["timestamp"] = moment.isoformat().replace("+00:00", "Z")
+        points.append(point)
+    return points
+
+
+def _satellite_from_raw_tle(raw_tle: str) -> Satrec:
+    line1, line2 = _extract_tle_lines(raw_tle)
+    return Satrec.twoline2rv(line1, line2)
+
+
+def _propagate_satellite_position(
+    satellite: Satrec,
+    moment: datetime,
+) -> dict[str, float]:
+    jd, fraction = _julian_day(moment)
+    error_code, position_km, _velocity_km_s = satellite.sgp4(jd, fraction)
+    if error_code != 0:
+        raise OrbitPropagationError(f"SGP4 传播失败，错误码: {error_code}")
+
+    latitude, longitude, altitude = _teme_to_geodetic(position_km, jd + fraction)
+    return {
+        "latitude": round(latitude, 6),
+        "longitude": round(longitude, 6),
+        "altitude_km": round(altitude, 3),
+    }
+
+
+def _orbital_period_minutes(raw_tle: str) -> float:
+    try:
+        period = parse_tle(raw_tle)["orbital_period_minutes"]
+    except (TleParseError, ValueError) as exc:
+        raise OrbitPropagationError("无法从 TLE 解析轨道周期") from exc
+    if period is None or float(period) <= 0:
+        raise OrbitPropagationError("TLE 轨道周期必须大于 0")
+    return float(period)
 
 
 def _normalize_datetime(value: datetime | None) -> datetime:

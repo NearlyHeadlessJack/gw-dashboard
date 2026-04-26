@@ -20,6 +20,12 @@ HULIANWANG DIGUI-02
 2 62324  86.5069   1.1568 0001856  73.6881 286.4457 13.24412762 65679
 """
 
+RAW_GEO_TLE = """\
+GEO TEST
+1 41866U 16071A   26115.50000000 -.00000127  00000+0  00000+0 0  9990
+2 41866   0.0170  85.1900 0001940  85.4000 112.2000  1.00270000 34458
+"""
+
 
 @pytest.fixture
 def client():
@@ -122,17 +128,49 @@ def test_satellite_history_api_returns_chart_points_oldest_first(client):
     assert payload[0]["apogee_km"] is not None
 
 
-def test_map_satellites_api_returns_positions_and_tracks(client):
-    response = client.get("/api/map/satellites?at=2026-04-26T08:00:00Z")
+def test_map_groups_api_returns_group_positions_and_previous_orbit_tracks(client):
+    response = client.get("/api/map/groups?at=2026-04-26T08:00:00Z")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["generated_at"] == "2026-04-26T08:00:00Z"
-    assert len(payload["satellites"]) == 2
-    first = payload["satellites"][0]
+    assert len(payload["groups"]) == 1
+    first = payload["groups"][0]
+    assert first["name"] == "低轨01组"
+    assert first["intl_designator"] == "2024-240"
+    assert first["representative_intl_designator"] == "2024-240A"
+    assert first["satellite_count"] == 2
+    assert first["orbit_type"] == "leo"
     assert -90 <= first["position"]["latitude"] <= 90
     assert -180 <= first["position"]["longitude"] <= 180
-    assert len(first["track"]) == 19
+    assert len(first["track"]) == 601
+    assert first["track"][-1]["timestamp"] == "2026-04-26T08:00:00Z"
+
+
+def test_map_groups_api_marks_geo_groups():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.create_satellite_group(
+        name="高轨01星",
+        intl_designator="2024-001",
+        satellite_count=1,
+        valid_satellite_count=1,
+        raw_tle=RAW_GEO_TLE,
+    )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    geo_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    response = geo_client.get("/api/map/groups?at=2026-04-26T08:00:00Z")
+
+    assert response.status_code == 200
+    group = response.json()["groups"][0]
+    assert group["orbit_type"] == "geo"
+    assert group["orbit"]["perigee_km"] > 35000
+    assert group["position"]["altitude_km"] > 35000
 
 
 def test_map_satellites_api_rejects_invalid_time(client):

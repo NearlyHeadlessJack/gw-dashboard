@@ -99,17 +99,22 @@ export type GeoPoint = {
   timestamp?: string
 }
 
-export type MapSatellite = {
+export type MapGroupTrack = {
+  id: number
+  name: string | null
   intl_designator: string
-  group_intl_designator: string
-  group_name: string | null
-  status: string
+  representative_intl_designator: string | null
+  satellite_count: number
+  valid_satellite_count: number
+  invalid_satellite_count: number
+  orbit: OrbitSummary
+  orbit_type: 'leo' | 'geo'
   position: GeoPoint
   track: GeoPoint[]
 }
 
 export type MapPayload = {
   generated_at: string
-  satellites: MapSatellite[]
-  skipped_satellites: number
+  groups: MapGroupTrack[]
+  skipped_groups: number
 }

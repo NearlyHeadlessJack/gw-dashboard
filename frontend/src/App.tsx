@@ -53,6 +53,19 @@ type MenuItem = {
 
 const GAODE_STANDARD_TILE_URL =
   'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}'
+const LEO_TRACK_COLORS = [
+  '#ff6b6b',
+  '#4ecdc4',
+  '#ffe66d',
+  '#a37eba',
+  '#f78c6b',
+  '#82e0aa',
+  '#85c1e9',
+  '#f0b27a',
+  '#d2b4de',
+  '#73c6b6',
+]
+const GEO_TRACK_COLORS = ['#ff2222', '#ff8800', '#00ddff']
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -311,7 +324,7 @@ function HistoryPage() {
 function MapPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const { data, loading, error } = useApi<MapPayload>(
-    '/api/map/satellites',
+    '/api/map/groups',
     refreshKey,
   )
 
@@ -325,8 +338,8 @@ function MapPage() {
       <SatelliteMap payload={data} />
       <div className="map-hud">
         <div className="map-hud-main">
-          <span className="hud-label">TRACKED</span>
-          <strong>{formatNumber(data?.satellites.length ?? 0)}</strong>
+          <span className="hud-label">GROUP TRACKS</span>
+          <strong>{formatNumber(data?.groups.length ?? 0)}</strong>
         </div>
         <div className="hud-meta">
           <Clock size={14} />
@@ -397,29 +410,34 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
     overlayLayer.clearLayers()
     const bounds = L.latLngBounds([])
 
-    payload.satellites.forEach((satellite) => {
-      const color = satellite.status === '有效' ? '#19d89f' : '#ff5a68'
-      splitTrackByDateline(satellite.track).forEach((segment) => {
+    let leoIndex = 0
+    let geoIndex = 0
+    payload.groups.forEach((group) => {
+      const color =
+        group.orbit_type === 'geo'
+          ? GEO_TRACK_COLORS[geoIndex++ % GEO_TRACK_COLORS.length]
+          : LEO_TRACK_COLORS[leoIndex++ % LEO_TRACK_COLORS.length]
+      splitTrackByDateline(group.track).forEach((segment) => {
         L.polyline(segment, {
           color,
-          opacity: 0.78,
-          weight: 2.5,
+          opacity: group.orbit_type === 'geo' ? 0.95 : 0.72,
+          weight: group.orbit_type === 'geo' ? 3 : 1.8,
           lineJoin: 'round',
         }).addTo(overlayLayer)
       })
 
-      const marker = L.circleMarker(pointToLatLng(satellite.position), {
-        radius: 5,
-        color: '#ffffff',
-        weight: 1.5,
+      const marker = L.circleMarker(pointToLatLng(group.position), {
+        radius: group.orbit_type === 'geo' ? 7 : 4,
+        color: group.orbit_type === 'geo' ? '#111827' : '#ffffff',
+        weight: group.orbit_type === 'geo' ? 2 : 1.3,
         fillColor: color,
         fillOpacity: 0.96,
       }).addTo(overlayLayer)
       marker.bindTooltip(
-        `${satellite.intl_designator} · ${satellite.group_name ?? '-'}`,
+        `${group.name ?? group.intl_designator}<br>${group.intl_designator} · ${orbitTypeLabel(group.orbit_type)}<br>${formatKm(group.orbit.perigee_km)} × ${formatKm(group.orbit.apogee_km)}`,
         { direction: 'top', offset: [0, -8] },
       )
-      bounds.extend(pointToLatLng(satellite.position))
+      bounds.extend(pointToLatLng(group.position))
     })
 
     if (bounds.isValid()) {
@@ -1061,6 +1079,10 @@ function orbitSentence(orbit: OrbitSummary): string {
   return `${formatDegree(orbit.inclination_deg)} / ${formatKm(
     orbit.perigee_km,
   )} - ${formatKm(orbit.apogee_km)}`
+}
+
+function orbitTypeLabel(value: 'leo' | 'geo'): string {
+  return value === 'geo' ? 'GEO' : 'LEO'
 }
 
 export default App

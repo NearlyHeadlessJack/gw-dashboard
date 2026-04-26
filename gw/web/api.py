@@ -6,7 +6,11 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from gw.database import DatabaseManager
-from gw.orbit import OrbitPropagationError, generate_ground_track, propagate_tle_position
+from gw.orbit import (
+    OrbitPropagationError,
+    generate_previous_orbit_ground_track,
+    propagate_tle_position,
+)
 
 
 Row = dict[str, Any]
@@ -74,38 +78,40 @@ def build_map_satellites(
     database: DatabaseManager,
     *,
     at: datetime | None = None,
-    track_factory: Callable[..., list[Row]] = generate_ground_track,
+    track_factory: Callable[..., list[Row]] = generate_previous_orbit_ground_track,
     position_factory: Callable[..., Row] = propagate_tle_position,
 ) -> Row:
-    """返回地图页需要的当前位置和轨迹数据。"""
+    """返回地图页需要的组级当前位置和过去一圈地面轨迹。"""
     moment = _as_utc(at)
-    satellites: list[Row] = []
+    groups: list[Row] = []
     skipped = 0
 
-    for satellite in list_current_satellites(database):
-        raw_tle = satellite.get("raw_tle")
+    for group in database.get_satellite_groups():
+        raw_tle = group.get("raw_tle")
         if not raw_tle:
             skipped += 1
             continue
         try:
             position = position_factory(str(raw_tle), moment)
-            track = track_factory(
-                str(raw_tle),
-                moment,
-                minutes_before=45,
-                minutes_after=45,
-                step_minutes=5,
-            )
+            track = track_factory(str(raw_tle), moment)
         except OrbitPropagationError:
             skipped += 1
             continue
 
-        satellites.append(
+        orbit = _orbit(group)
+        groups.append(
             {
-                "intl_designator": satellite["intl_designator"],
-                "group_intl_designator": satellite["group_intl_designator"],
-                "group_name": satellite["group_name"],
-                "status": satellite["status"],
+                "id": group["id"],
+                "name": group["name"],
+                "intl_designator": group["intl_designator"],
+                "representative_intl_designator": _representative_intl_designator(
+                    group["intl_designator"],
+                ),
+                "satellite_count": _int(group.get("satellite_count")),
+                "valid_satellite_count": _int(group.get("valid_satellite_count")),
+                "invalid_satellite_count": _int(group.get("invalid_satellite_count")),
+                "orbit": orbit,
+                "orbit_type": _orbit_type(orbit),
                 "position": position,
                 "track": track,
             }
@@ -113,8 +119,8 @@ def build_map_satellites(
 
     return {
         "generated_at": moment.isoformat().replace("+00:00", "Z"),
-        "satellites": satellites,
-        "skipped_satellites": skipped,
+        "groups": groups,
+        "skipped_groups": skipped,
     }
 
 
@@ -258,6 +264,23 @@ def _orbit(row: Row) -> Row:
         "apogee_km": row.get("apogee_km"),
         "eccentricity": row.get("eccentricity"),
     }
+
+
+def _representative_intl_designator(group_intl_designator: Any) -> str | None:
+    if group_intl_designator is None:
+        return None
+    value = str(group_intl_designator).strip()
+    return f"{value}A" if value else None
+
+
+def _orbit_type(orbit: Row) -> str:
+    perigee = orbit.get("perigee_km")
+    apogee = orbit.get("apogee_km")
+    if perigee is not None and float(perigee) >= 35000:
+        return "geo"
+    if apogee is not None and float(apogee) >= 35000:
+        return "geo"
+    return "leo"
 
 
 def _datetime_sort_value(value: Any) -> datetime:

@@ -154,18 +154,24 @@ def create_app(
     def satellite_history(intl_designator: str) -> Any:
         return _handle_database_errors(lambda: get_satellite_history(db, intl_designator))
 
-    @app.get("/api/map/satellites")
-    def map_satellites(
+    @app.get("/api/map/groups")
+    def map_groups(
         at: str | None = Query(default=None, description="ISO-8601 UTC time"),
     ) -> Any:
         moment = _parse_time_query(at)
-        cache_key = f"map:{moment.isoformat(timespec='seconds')}"
+        cache_key = f"map:groups:{moment.isoformat(timespec='seconds')}"
         return _cached(
             app,
             cache_key,
             lambda: build_map_satellites(db, at=moment),
             ttl_override=min(app_config.backend.cache_ttl_seconds, 10),
         )
+
+    @app.get("/api/map/satellites")
+    def map_satellites(
+        at: str | None = Query(default=None, description="ISO-8601 UTC time"),
+    ) -> Any:
+        return map_groups(at)
 
     _mount_frontend(app, app_config)
     return app

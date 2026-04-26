@@ -109,7 +109,7 @@ export type MapGroupTrack = {
   valid_satellite_count: number
   invalid_satellite_count: number
   orbit: OrbitSummary
-  orbit_type: 'leo' | 'geo'
+  orbit_type: 'leo' | 'sso' | 'geo'
   position: GeoPoint
   track: GeoPoint[]
 }

@@ -65,6 +65,7 @@ const LEO_TRACK_COLORS = [
   '#d2b4de',
   '#73c6b6',
 ]
+const SSO_TRACK_COLORS = ['#22d3ee', '#38bdf8', '#60a5fa', '#2dd4bf']
 const GEO_TRACK_COLORS = ['#ff2222', '#ff8800', '#00ddff']
 
 const DASHBOARD_MENU: MenuItem[] = [
@@ -443,25 +444,30 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
     const bounds = L.latLngBounds([])
 
     let leoIndex = 0
+    let ssoIndex = 0
     let geoIndex = 0
     payload.groups.forEach((group) => {
+      const isGeo = group.orbit_type === 'geo'
+      const isSso = group.orbit_type === 'sso'
       const color =
-        group.orbit_type === 'geo'
+        isGeo
           ? GEO_TRACK_COLORS[geoIndex++ % GEO_TRACK_COLORS.length]
+          : isSso
+            ? SSO_TRACK_COLORS[ssoIndex++ % SSO_TRACK_COLORS.length]
           : LEO_TRACK_COLORS[leoIndex++ % LEO_TRACK_COLORS.length]
       splitTrackByDateline(group.track).forEach((segment) => {
         L.polyline(segment, {
           color,
-          opacity: group.orbit_type === 'geo' ? 0.95 : 0.72,
-          weight: group.orbit_type === 'geo' ? 3 : 1.8,
+          opacity: isGeo ? 0.95 : isSso ? 0.82 : 0.72,
+          weight: isGeo ? 3 : isSso ? 2.2 : 1.8,
           lineJoin: 'round',
         }).addTo(overlayLayer)
       })
 
       const marker = L.circleMarker(pointToLatLng(group.position), {
-        radius: group.orbit_type === 'geo' ? 7 : 4,
-        color: group.orbit_type === 'geo' ? '#111827' : '#ffffff',
-        weight: group.orbit_type === 'geo' ? 2 : 1.3,
+        radius: isGeo ? 7 : isSso ? 5 : 4,
+        color: isGeo ? '#111827' : '#ffffff',
+        weight: isGeo ? 2 : isSso ? 1.6 : 1.3,
         fillColor: color,
         fillOpacity: 0.96,
       }).addTo(overlayLayer)
@@ -1264,8 +1270,10 @@ function orbitSentence(orbit: OrbitSummary): string {
   )} - ${formatKm(orbit.apogee_km)}`
 }
 
-function orbitTypeLabel(value: 'leo' | 'geo'): string {
-  return value === 'geo' ? 'GEO' : 'LEO'
+function orbitTypeLabel(value: 'leo' | 'sso' | 'geo'): string {
+  if (value === 'geo') return 'GEO'
+  if (value === 'sso') return 'SSO'
+  return 'LEO'
 }
 
 export default App

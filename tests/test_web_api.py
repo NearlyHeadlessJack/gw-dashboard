@@ -26,6 +26,12 @@ GEO TEST
 2 41866   0.0170  85.1900 0001940  85.4000 112.2000  1.00270000 34458
 """
 
+RAW_SSO_TLE = """\
+SSO TEST
+1 62323U 24240A   26115.49220466  .00000041  00000+0  60880-4 0  9996
+2 62323  97.5000   1.0150 0001837  72.4834 287.6500 14.24413432 65663
+"""
+
 
 @pytest.fixture
 def client():
@@ -289,6 +295,33 @@ def test_map_groups_api_marks_geo_groups():
     assert group["orbit_type"] == "geo"
     assert group["orbit"]["perigee_km"] > 35000
     assert group["position"]["altitude_km"] > 35000
+
+
+def test_map_groups_api_marks_sso_groups():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.create_satellite_group(
+        name="太阳同步01组",
+        intl_designator="2024-002",
+        satellite_count=1,
+        valid_satellite_count=1,
+        raw_tle=RAW_SSO_TLE,
+    )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    sso_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    response = sso_client.get("/api/map/groups?at=2026-04-26T08:00:00Z")
+
+    assert response.status_code == 200
+    group = response.json()["groups"][0]
+    assert group["orbit_type"] == "sso"
+    assert 95 <= group["orbit"]["inclination_deg"] <= 105
+    assert 300 <= group["orbit"]["perigee_km"] <= 2000
+    assert group["orbit"]["apogee_km"] <= 2000
 
 
 def test_map_satellites_api_rejects_invalid_time(client):

@@ -334,6 +334,16 @@ def _orbit_type(orbit: Row) -> str:
         return "geo"
     if apogee is not None and float(apogee) >= 35000:
         return "geo"
+    inclination = orbit.get("inclination_deg")
+    if (
+        inclination is not None
+        and perigee is not None
+        and apogee is not None
+        and 95 <= float(inclination) <= 105
+        and float(perigee) >= 300
+        and float(apogee) <= 2000
+    ):
+        return "sso"
     return "leo"
 
 

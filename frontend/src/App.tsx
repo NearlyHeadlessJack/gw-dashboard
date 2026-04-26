@@ -39,6 +39,7 @@ import type {
   GroupSummary,
   HistoryPoint,
   LaunchPreview,
+  MapSatellitePoint,
   MapPointsPayload,
   MapPayload,
   OrbitSummary,
@@ -69,8 +70,9 @@ const LEO_TRACK_COLORS = [
   '#d2b4de',
   '#73c6b6',
 ]
-const OVERVIEW_MAP_GEO_COLOR = '#ef4444'
+const OVERVIEW_MAP_HIGH_ORBIT_COLOR = '#ef4444'
 const OVERVIEW_MAP_DEFAULT_COLOR = '#2563eb'
+const HIGH_ORBIT_ALTITUDE_KM = 35_000
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -592,10 +594,9 @@ function OverviewPointMap({
       const position = propagateTlePosition(satellite.raw_tle, now)
       if (!position) return
 
-      const color =
-        satellite.orbit_type === 'geo'
-          ? OVERVIEW_MAP_GEO_COLOR
-          : OVERVIEW_MAP_DEFAULT_COLOR
+      const color = isHighOrbitSatellite(satellite)
+        ? OVERVIEW_MAP_HIGH_ORBIT_COLOR
+        : OVERVIEW_MAP_DEFAULT_COLOR
       const marker = L.circleMarker(pointToLatLng(position), {
         radius: 3.6,
         color: '#ffffff',
@@ -1431,6 +1432,16 @@ function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: stri
   return group.orbit_type === 'geo'
     ? `${group.intl_designator} · GEO`
     : group.intl_designator
+}
+
+function isHighOrbitSatellite(satellite: MapSatellitePoint): boolean {
+  const { perigee_km: perigee, apogee_km: apogee } = satellite.orbit
+  return (
+    satellite.orbit_type === 'geo' ||
+    (perigee !== null && perigee >= HIGH_ORBIT_ALTITUDE_KM) ||
+    (apogee !== null && apogee >= HIGH_ORBIT_ALTITUDE_KM) ||
+    (satellite.group_name?.includes('高轨') ?? false)
+  )
 }
 
 export default App

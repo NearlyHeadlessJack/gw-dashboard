@@ -355,6 +355,7 @@ function OverviewPage() {
 }
 
 function OrbitExplorerPage() {
+  const now = useClock()
   const { data: groups, loading, error } = useApi<GroupSummary[]>('/api/groups')
   const [searchParams, setSearchParams] = useSearchParams()
   const [satelliteIntl, setSatelliteIntl] = useState('')
@@ -391,10 +392,10 @@ function OrbitExplorerPage() {
 
       {detailLoading && <LoadingState label="轨道数据同步中" />}
       {!detailLoading && detail && !selectedSatellite && (
-        <GroupDetailView detail={detail} />
+        <GroupDetailView detail={detail} now={now} />
       )}
       {!detailLoading && selectedSatellite && (
-        <SatelliteDetailView satellite={selectedSatellite} />
+        <SatelliteDetailView satellite={selectedSatellite} now={now} />
       )}
     </div>
   )
@@ -840,6 +841,140 @@ function OverviewPointMap({
   )
 }
 
+function OrbitSelectionMap({
+  satellites,
+  now,
+}: {
+  satellites: MapSatellitePoint[]
+  now: Date
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<L.Map | null>(null)
+  const trackLayerRef = useRef<L.LayerGroup | null>(null)
+  const markerLayerRef = useRef<L.LayerGroup | null>(null)
+  const mapFittedRef = useRef(false)
+  const [mapError, setMapError] = useState<string | null>(null)
+  const trackMinute = Math.floor(now.getTime() / 60_000)
+  const tleKey = satellites
+    .map(
+      (satellite) =>
+        `${satellite.id ?? satellite.intl_designator}:${satellite.raw_tle}`,
+    )
+    .join('|')
+
+  useEffect(() => {
+    if (!containerRef.current) {
+      return
+    }
+
+    const map = L.map(containerRef.current, {
+      center: [25, 105],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 10,
+      worldCopyJump: true,
+      zoomControl: false,
+    })
+
+    map.attributionControl.setPrefix(false)
+    L.control.zoom({ position: 'bottomright' }).addTo(map)
+    L.tileLayer(GAODE_STANDARD_TILE_URL, {
+      subdomains: ['1', '2', '3', '4'],
+      minZoom: 2,
+      maxZoom: 10,
+      attribution: '© 高德地图',
+    })
+      .on('tileerror', () => setMapError('高德标准瓦片加载失败'))
+      .on('load', () => setMapError(null))
+      .addTo(map)
+
+    trackLayerRef.current = L.layerGroup().addTo(map)
+    markerLayerRef.current = L.layerGroup().addTo(map)
+    mapRef.current = map
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+      trackLayerRef.current = null
+      markerLayerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    mapFittedRef.current = false
+  }, [tleKey])
+
+  useEffect(() => {
+    const trackLayer = trackLayerRef.current
+    if (!trackLayer) return
+
+    trackLayer.clearLayers()
+    if (satellites.length === 0) return
+
+    const trackMoment = new Date(trackMinute * 60_000)
+    satellites.forEach((satellite, index) => {
+      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      const track = generatePreviousOrbitTrack(satellite.raw_tle, trackMoment)
+      splitTrackByDateline(track).forEach((segment) => {
+        L.polyline(segment, {
+          color,
+          opacity: 0.7,
+          weight: 1.7,
+          lineJoin: 'round',
+          interactive: false,
+        }).addTo(trackLayer)
+      })
+    })
+  }, [satellites, trackMinute])
+
+  useEffect(() => {
+    const map = mapRef.current
+    const markerLayer = markerLayerRef.current
+    if (!map || !markerLayer) return
+
+    markerLayer.clearLayers()
+    const bounds = L.latLngBounds([])
+    satellites.forEach((satellite, index) => {
+      const position = propagateTlePosition(satellite.raw_tle, now)
+      if (!position) return
+
+      const latLng = pointToLatLng(position)
+      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      const marker = L.circleMarker(latLng, {
+        radius: 4.2,
+        color: '#ffffff',
+        weight: 1.4,
+        fillColor: color,
+        fillOpacity: 0.96,
+      }).addTo(markerLayer)
+      marker.bindTooltip(satelliteMapTooltip(satellite), {
+        direction: 'top',
+        offset: [0, -8],
+      })
+      bounds.extend(latLng)
+    })
+
+    if (bounds.isValid()) {
+      if (!mapFittedRef.current) {
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 4 })
+        mapFittedRef.current = true
+      }
+    } else {
+      map.setView([25, 105], 2)
+    }
+  }, [satellites, now])
+
+  return (
+    <>
+      <div ref={containerRef} className="tile-map-container" />
+      {satellites.length === 0 && (
+        <div className="orbit-map-state">暂无可绘制 TLE</div>
+      )}
+      {mapError && <div className="map-error-note">{mapError}</div>}
+    </>
+  )
+}
+
 function SelectorPanel({
   groups,
   selectedGroup,
@@ -895,7 +1030,12 @@ function SelectorPanel({
   )
 }
 
-function GroupDetailView({ detail }: { detail: GroupDetail }) {
+function GroupDetailView({ detail, now }: { detail: GroupDetail; now: Date }) {
+  const mapSatellites = useMemo(
+    () => detail.satellites.map(satellitePreviewToMapPoint).filter(isMapSatellitePoint),
+    [detail.satellites],
+  )
+
   return (
     <div className="dashboard-grid">
       <Panel className="span-4" title={detail.name} icon={ListTree}>
@@ -915,14 +1055,35 @@ function GroupDetailView({ detail }: { detail: GroupDetail }) {
       <Panel className="span-8" title="组内卫星" icon={Satellite}>
         <RecentSatellitesTable satellites={detail.satellites} />
       </Panel>
-      <Panel className="span-12" title="组轨道概览" icon={Orbit}>
-        <OrbitTiles orbit={detail.orbit} />
+      <Panel className="span-4" title="组轨道概览" icon={Orbit} dense>
+        <OrbitTiles orbit={detail.orbit} compact />
+      </Panel>
+      <Panel
+        className="span-8"
+        title="组轨道地图"
+        icon={Map}
+        meta={`${formatNumber(mapSatellites.length)} 颗`}
+      >
+        <div className="orbit-map-shell">
+          <OrbitSelectionMap satellites={mapSatellites} now={now} />
+        </div>
       </Panel>
     </div>
   )
 }
 
-function SatelliteDetailView({ satellite }: { satellite: SatellitePreview }) {
+function SatelliteDetailView({
+  satellite,
+  now,
+}: {
+  satellite: SatellitePreview
+  now: Date
+}) {
+  const mapSatellites = useMemo(() => {
+    const mapPoint = satellitePreviewToMapPoint(satellite)
+    return mapPoint ? [mapPoint] : []
+  }, [satellite])
+
   return (
     <div className="dashboard-grid">
       <Panel className="span-5" title={satellite.intl_designator} icon={Satellite}>
@@ -940,8 +1101,13 @@ function SatelliteDetailView({ satellite }: { satellite: SatellitePreview }) {
           ]}
         />
       </Panel>
-      <Panel className="span-7" title="当前轨道" icon={Orbit}>
-        <OrbitTiles orbit={satellite.orbit} />
+      <Panel className="span-7" title="当前轨道" icon={Orbit} dense>
+        <OrbitTiles orbit={satellite.orbit} compact />
+      </Panel>
+      <Panel className="span-12" title="单星轨道地图" icon={Map}>
+        <div className="orbit-map-shell">
+          <OrbitSelectionMap satellites={mapSatellites} now={now} />
+        </div>
       </Panel>
     </div>
   )
@@ -1322,9 +1488,15 @@ function StatBars({
   )
 }
 
-function OrbitTiles({ orbit }: { orbit: OrbitSummary }) {
+function OrbitTiles({
+  orbit,
+  compact = false,
+}: {
+  orbit: OrbitSummary
+  compact?: boolean
+}) {
   return (
-    <div className="orbit-tiles">
+    <div className={`orbit-tiles${compact ? ' compact' : ''}`}>
       <MetricInline label="轨道倾角" value={formatDegree(orbit.inclination_deg)} />
       <MetricInline label="近地点" value={formatKm(orbit.perigee_km)} />
       <MetricInline label="远地点" value={formatKm(orbit.apogee_km)} />
@@ -1926,6 +2098,48 @@ function orbitSentence(orbit: OrbitSummary): string {
   return `${formatDegree(orbit.inclination_deg)} / ${formatKm(
     orbit.perigee_km,
   )} - ${formatKm(orbit.apogee_km)}`
+}
+
+function satellitePreviewToMapPoint(
+  satellite: SatellitePreview,
+): MapSatellitePoint | null {
+  if (!satellite.raw_tle) return null
+  return {
+    id: satellite.id,
+    intl_designator: satellite.intl_designator,
+    status: satellite.status,
+    group_id: satellite.group_id,
+    group_name: satellite.group_name,
+    group_intl_designator: satellite.group_intl_designator,
+    orbit: satellite.orbit,
+    orbit_type: classifyOrbitType(satellite.orbit),
+    raw_tle: satellite.raw_tle,
+  }
+}
+
+function isMapSatellitePoint(
+  value: MapSatellitePoint | null,
+): value is MapSatellitePoint {
+  return value !== null
+}
+
+function classifyOrbitType(orbit: OrbitSummary): 'leo' | 'sso' | 'geo' {
+  const { inclination_deg: inclination, perigee_km: perigee, apogee_km: apogee } =
+    orbit
+  if (perigee !== null && perigee >= HIGH_ORBIT_ALTITUDE_KM) return 'geo'
+  if (apogee !== null && apogee >= HIGH_ORBIT_ALTITUDE_KM) return 'geo'
+  if (
+    inclination !== null &&
+    perigee !== null &&
+    apogee !== null &&
+    inclination >= 95 &&
+    inclination <= 105 &&
+    perigee >= 300 &&
+    apogee <= 2000
+  ) {
+    return 'sso'
+  }
+  return 'leo'
 }
 
 function satelliteMarkerKey(satellite: MapSatellitePoint): string {

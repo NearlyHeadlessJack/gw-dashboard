@@ -65,8 +65,6 @@ const LEO_TRACK_COLORS = [
   '#d2b4de',
   '#73c6b6',
 ]
-const SSO_TRACK_COLORS = ['#22d3ee', '#38bdf8', '#60a5fa', '#2dd4bf']
-const GEO_TRACK_COLORS = ['#ff2222', '#ff8800', '#00ddff']
 
 const DASHBOARD_MENU: MenuItem[] = [
   { path: '/dashboard', label: '总览', icon: LayoutDashboard },
@@ -444,35 +442,26 @@ function SatelliteMap({ payload }: { payload: MapPayload | null }) {
     const bounds = L.latLngBounds([])
 
     let leoIndex = 0
-    let ssoIndex = 0
-    let geoIndex = 0
     payload.groups.forEach((group) => {
-      const isGeo = group.orbit_type === 'geo'
-      const isSso = group.orbit_type === 'sso'
-      const color =
-        isGeo
-          ? GEO_TRACK_COLORS[geoIndex++ % GEO_TRACK_COLORS.length]
-          : isSso
-            ? SSO_TRACK_COLORS[ssoIndex++ % SSO_TRACK_COLORS.length]
-          : LEO_TRACK_COLORS[leoIndex++ % LEO_TRACK_COLORS.length]
+      const color = LEO_TRACK_COLORS[leoIndex++ % LEO_TRACK_COLORS.length]
       splitTrackByDateline(group.track).forEach((segment) => {
         L.polyline(segment, {
           color,
-          opacity: isGeo ? 0.95 : isSso ? 0.82 : 0.72,
-          weight: isGeo ? 3 : isSso ? 2.2 : 1.8,
+          opacity: 0.72,
+          weight: 1.8,
           lineJoin: 'round',
         }).addTo(overlayLayer)
       })
 
       const marker = L.circleMarker(pointToLatLng(group.position), {
-        radius: isGeo ? 7 : isSso ? 5 : 4,
-        color: isGeo ? '#111827' : '#ffffff',
-        weight: isGeo ? 2 : isSso ? 1.6 : 1.3,
+        radius: 4,
+        color: '#ffffff',
+        weight: 1.3,
         fillColor: color,
         fillOpacity: 0.96,
       }).addTo(overlayLayer)
       marker.bindTooltip(
-        `${group.name ?? group.intl_designator}<br>${group.intl_designator} · ${orbitTypeLabel(group.orbit_type)}<br>${formatKm(group.orbit.perigee_km)} × ${formatKm(group.orbit.apogee_km)}`,
+        `${group.name ?? group.intl_designator}<br>${mapTooltipIdentifier(group)}<br>${formatKm(group.orbit.perigee_km)} × ${formatKm(group.orbit.apogee_km)}`,
         { direction: 'top', offset: [0, -8] },
       )
       bounds.extend(pointToLatLng(group.position))
@@ -1270,10 +1259,10 @@ function orbitSentence(orbit: OrbitSummary): string {
   )} - ${formatKm(orbit.apogee_km)}`
 }
 
-function orbitTypeLabel(value: 'leo' | 'sso' | 'geo'): string {
-  if (value === 'geo') return 'GEO'
-  if (value === 'sso') return 'SSO'
-  return 'LEO'
+function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: string }): string {
+  return group.orbit_type === 'geo'
+    ? `${group.intl_designator} · GEO`
+    : group.intl_designator
 }
 
 export default App

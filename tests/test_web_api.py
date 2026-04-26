@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -598,6 +599,12 @@ def test_backend_serves_frontend_dist_as_single_process_app(tmp_path):
     assert frontend_client.get("/map").text == "<main>GW Dashboard</main>"
     assert frontend_client.get("/assets/app.js").text == "console.log('gw')"
     assert frontend_client.get("/api/not-found").status_code == 404
+
+
+def test_default_frontend_dist_dir_resolves_to_packaged_static():
+    dist_dir = web_app._resolve_frontend_dist_dir(FrontendConfig().dist_dir)
+
+    assert dist_dir == Path(web_app.__file__).resolve().parents[2] / "gw/web/static"
 
 
 def test_backend_logs_frontend_entry_when_lifespan_starts(caplog):

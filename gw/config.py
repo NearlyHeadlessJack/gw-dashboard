@@ -27,7 +27,7 @@ REQUIRED_CONFIG_ITEMS = [
     "backend.cors_origins: 允许访问后端 API 的前端来源列表",
     "backend.cache_ttl_seconds: web API 缓存时间，默认 30",
     "frontend.origin: 前端页面来源，默认 http://localhost:5173",
-    "frontend.dist_dir: 前端构建产物目录，默认 frontend/dist",
+    "frontend.dist_dir: 前端构建产物目录，默认 gw/web/static（随 Python 包发布）",
     "daemon.update_check_interval_seconds: 守护进程检查更新间隔，默认 3600",
     "daemon.data_valid_duration_seconds: 数据有效期，默认 86400",
     "daemon.satellite_record_limit: 单星历史记录上限，默认 1000",
@@ -100,7 +100,7 @@ class BackendConfig:
 @dataclass(frozen=True)
 class FrontendConfig:
     origin: str = "http://localhost:5173"
-    dist_dir: str = "frontend/dist"
+    dist_dir: str = "gw/web/static"
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "FrontendConfig":

@@ -12,7 +12,8 @@ backend:
 
 frontend:
   origin: http://localhost:5173
-  dist_dir: frontend/dist
+  # 默认使用 Python 包内置前端静态文件；开发时可改为 frontend/dist 或其他绝对路径。
+  dist_dir: gw/web/static
 
 daemon:
   update_check_interval_seconds: 3600

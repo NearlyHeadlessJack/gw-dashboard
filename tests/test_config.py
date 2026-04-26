@@ -148,6 +148,7 @@ def test_missing_database_config_uses_default_sqlite(monkeypatch, tmp_path):
     assert config.database.connection == str(
         Path(tmp_path, ".gwtracking", "database.db")
     )
+    assert config.frontend.dist_dir == "gw/web/static"
 
 
 def test_non_sqlite_database_requires_connection():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
@@ -13,6 +14,8 @@ from gw.database import DatabaseManager
 from gw.scraper.celestrak import fetch_group_tle_data
 from gw.scraper.huiji import fetch_satellite_groups
 
+
+logger = logging.getLogger(__name__)
 
 HuijiGroupFetcher = Callable[[], list[dict[str, Any]]]
 GroupTleFetcher = Callable[[str, int], list[dict[str, Any]]]
@@ -54,15 +57,23 @@ def update_satellite_database(
     灰机 wiki 表只提供组级信息；组表和单星历史表均保存原始 TLE，
     轨道数值由查询接口按需解码。
     """
+    logger.info("data update starting: initializing database schema")
     database.initialize_database()
+    logger.info("crawler starting: fetching satellite groups from huiji wiki")
     groups = [
         group
         for group in (_normalize_group_row(row) for row in huiji_group_fetcher())
         if group is not None
     ]
+    logger.info("crawler complete: parsed %s satellite groups", len(groups))
 
     manufacturer_ids = _upsert_manufacturers(database, groups)
     rocket_ids = _upsert_rockets(database, groups)
+    logger.info(
+        "data update upserted statistics: manufacturers=%s rockets=%s",
+        len(manufacturer_ids),
+        len(rocket_ids),
+    )
 
     group_ids: dict[str, int] = {}
     for group in groups:
@@ -85,13 +96,28 @@ def update_satellite_database(
     satellite_records_added = 0
     for group in groups:
         if group.satellite_count <= 0:
+            logger.info(
+                "crawler skipping group %s: satellite_count=%s",
+                group.intl_designator,
+                group.satellite_count,
+            )
             continue
 
+        logger.info(
+            "crawler starting: fetching TLE for group=%s expected_satellites=%s",
+            group.intl_designator,
+            group.satellite_count,
+        )
         parsed_tles = sorted(
             group_tle_fetcher(group.intl_designator, group.satellite_count),
             key=lambda item: DatabaseManager._intl_designator_sort_key(
                 _satellite_intl_designator(item) or ""
             ),
+        )
+        logger.info(
+            "crawler complete: group=%s tle_records=%s",
+            group.intl_designator,
+            len(parsed_tles),
         )
         if not parsed_tles:
             continue
@@ -158,17 +184,33 @@ def update_satellite_database(
             valid_satellite_count=valid_satellite_count,
             invalid_satellite_count=invalid_satellite_count,
         )
+        logger.info(
+            "data update group saved: group=%s valid=%s invalid=%s",
+            group.intl_designator,
+            valid_satellite_count,
+            invalid_satellite_count,
+        )
 
     if update_metainfo:
         _mark_database_updated(database, now or datetime.now(timezone.utc))
 
-    return DatabaseUpdateResult(
+    result = DatabaseUpdateResult(
         groups_updated=len(groups),
         manufacturers_updated=len(manufacturer_ids),
         rockets_updated=len(rocket_ids),
         group_satellites_updated=group_satellites_updated,
         satellite_records_added=satellite_records_added,
     )
+    logger.info(
+        "data update complete: groups=%s manufacturers=%s rockets=%s "
+        "group_satellites=%s satellite_records=%s",
+        result.groups_updated,
+        result.manufacturers_updated,
+        result.rockets_updated,
+        result.group_satellites_updated,
+        result.satellite_records_added,
+    )
+    return result
 
 
 def _upsert_manufacturers(

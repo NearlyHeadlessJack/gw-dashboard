@@ -1,4 +1,5 @@
 import threading
+import logging
 
 from gw.config import AppConfig, DaemonConfig, DatabaseConfig
 from gw.daemon import DaemonCycleResult, DashboardDaemon
@@ -76,6 +77,23 @@ def test_run_cycle_updates_then_rechecks_database_expiration():
     )
     assert update_calls == ["update"]
     assert database.check_count == 2
+
+
+def test_run_cycle_logs_update_status(caplog):
+    database = FakeDatabase([True, False])
+    daemon = DashboardDaemon(
+        make_config(),
+        database,
+        data_updater=lambda: None,
+    )
+
+    with caplog.at_level(logging.INFO, logger="gw.daemon.runner"):
+        daemon.run_cycle()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "daemon cycle checking data expiration" in messages
+    assert "daemon cycle detected expired data; update starting" in messages
+    assert "daemon cycle complete: data update finished successfully" in messages
 
 
 def test_run_cycle_reports_still_expired_after_update_placeholder():

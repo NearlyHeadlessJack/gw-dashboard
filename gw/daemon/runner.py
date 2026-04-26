@@ -64,10 +64,15 @@ class DashboardDaemon(threading.Thread):
 
     def stop(self) -> None:
         """请求 daemon 停止；如果正在睡眠会立即唤醒。"""
+        logger.info("daemon stop requested")
         self._stop_event.set()
 
     def run(self) -> None:
         """线程入口：启动占位服务，然后循环检查数据库是否过期。"""
+        logger.info(
+            "daemon starting: check_interval=%ss",
+            self.check_interval_seconds,
+        )
         try:
             self.start_runtime_services()
         except Exception as exc:
@@ -82,27 +87,41 @@ class DashboardDaemon(threading.Thread):
                 self.last_error = exc
                 logger.exception("daemon cycle failed")
             self._stop_event.wait(self.check_interval_seconds)
+        logger.info("daemon stopped")
 
     def start_runtime_services(self) -> None:
         """首次运行 daemon 时启动后端 web 服务和前端服务。"""
         if self._services_started:
+            logger.info("daemon runtime services already started")
             return
+        logger.info("daemon runtime services starting")
         self.web_server_starter()
         self.frontend_server_starter()
         self._services_started = True
+        logger.info("daemon runtime services ready")
 
     def run_cycle(self) -> DaemonCycleResult:
         """执行一次数据库过期检查和必要的数据更新。"""
+        logger.info("daemon cycle checking data expiration")
         expired_before_update = self.database.is_update_expired()
         if not expired_before_update:
+            logger.info(
+                "daemon cycle complete: data is fresh; next_check_in=%ss",
+                self.check_interval_seconds,
+            )
             return DaemonCycleResult(
                 expired_before_update=False,
                 update_ran=False,
                 expired_after_update=False,
             )
 
+        logger.info("daemon cycle detected expired data; update starting")
         self.data_updater()
         expired_after_update = self.database.is_update_expired()
+        if expired_after_update:
+            logger.warning("daemon cycle complete: data update ran but data is still expired")
+        else:
+            logger.info("daemon cycle complete: data update finished successfully")
         return DaemonCycleResult(
             expired_before_update=True,
             update_ran=True,

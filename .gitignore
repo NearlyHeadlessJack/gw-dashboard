@@ -219,3 +219,6 @@ __marimo__/
 
 # Local temporary memory
 tmp_mem.md
+
+# Runtime database files
+database/

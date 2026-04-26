@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 
 import pytest
 
@@ -204,3 +205,27 @@ def test_update_satellite_database_rejects_removed_orbit_write_fields(db):
 
     with pytest.raises(DatabaseConfigurationError, match="不支持的字段"):
         db.update_satellite_group(group_id, eccentricity=0.0001)
+
+
+def test_update_satellite_database_logs_progress(db, caplog):
+    with caplog.at_level(logging.INFO, logger="gw.utils.update_database"):
+        update_satellite_database(
+            db,
+            huiji_group_fetcher=lambda: [
+                {
+                    "名称": "低轨01组A星",
+                    "COSPAR": "2024-240",
+                    "部署颗数": "1",
+                }
+            ],
+            group_tle_fetcher=lambda intl_designator, satellite_count: [
+                parse_tle(RAW_TLE_A)
+            ],
+            update_metainfo=False,
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("data update starting" in message for message in messages)
+    assert any("crawler starting: fetching satellite groups" in message for message in messages)
+    assert any("crawler starting: fetching TLE for group=2024-240" in message for message in messages)
+    assert any("data update complete" in message for message in messages)

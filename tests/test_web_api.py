@@ -78,7 +78,7 @@ def client():
         backend=BackendConfig(cache_ttl_seconds=0),
         frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
     )
-    app = create_app(config, database=db)
+    app = create_app(config, database=db, start_daemon=False)
     return TestClient(app)
 
 
@@ -154,7 +154,7 @@ def test_backend_serves_frontend_dist_as_single_process_app(tmp_path):
         backend=BackendConfig(cache_ttl_seconds=0),
         frontend=FrontendConfig(dist_dir=str(dist_dir)),
     )
-    frontend_client = TestClient(create_app(config, database=db))
+    frontend_client = TestClient(create_app(config, database=db, start_daemon=False))
 
     assert frontend_client.get("/").text == "<main>GW Dashboard</main>"
     assert frontend_client.get("/dashboard/history").text == "<main>GW Dashboard</main>"

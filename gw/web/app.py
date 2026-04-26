@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+import logging
+from contextlib import asynccontextmanager
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from gw.config import AppConfig, load_config
+from gw.daemon import DashboardDaemon
 from gw.database import DatabaseConfigurationError, DatabaseManager, DatabaseQueryError
+from gw.utils.update_database import update_satellite_database
 from gw.web.api import (
     build_dashboard,
     build_map_satellites,
@@ -22,6 +26,9 @@ from gw.web.api import (
     get_satellite_history,
     list_groups,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class TtlCache:
@@ -51,6 +58,7 @@ def create_app(
     config: AppConfig | None = None,
     *,
     database: DatabaseManager | None = None,
+    start_daemon: bool = True,
 ) -> FastAPI:
     """创建 Web API 应用。"""
     app_config = config or load_config()
@@ -58,10 +66,40 @@ def create_app(
         app_config.database.type,
         app_config.database.connection,
     )
+    logger.info("database initializing: type=%s", app_config.database.type)
     db.initialize_database()
+    _ensure_metainfo_defaults(db, app_config)
     cache = TtlCache()
 
-    app = FastAPI(title="GW Dashboard API", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        daemon: DashboardDaemon | None = None
+        if start_daemon:
+            daemon = _create_data_daemon(app_config, db)
+            app.state.daemon = daemon
+            logger.info(
+                "daemon launching in background: interval=%ss valid_duration=%ss "
+                "satellite_record_limit=%s",
+                app_config.daemon.update_check_interval_seconds,
+                app_config.daemon.data_valid_duration_seconds,
+                app_config.daemon.satellite_record_limit,
+            )
+            daemon.start()
+        else:
+            app.state.daemon = None
+            logger.info("daemon disabled for this app instance")
+
+        try:
+            yield
+        finally:
+            if daemon is not None:
+                logger.info("daemon shutdown requested by web app")
+                daemon.stop()
+                daemon.join(timeout=10)
+                if daemon.is_alive():
+                    logger.warning("daemon did not stop within timeout")
+
+    app = FastAPI(title="GW Dashboard API", version="0.1.0", lifespan=lifespan)
     app.state.config = app_config
     app.state.database = db
     app.state.cache = cache
@@ -133,6 +171,49 @@ def create_app(
     return app
 
 
+def _ensure_metainfo_defaults(database: DatabaseManager, config: AppConfig) -> None:
+    metainfo = database.get_metainfo()
+    if metainfo is not None:
+        logger.info(
+            "database metainfo loaded: last_updated_at=%s valid_duration=%ss "
+            "satellite_record_limit=%s",
+            metainfo["last_updated_at"],
+            metainfo["valid_duration_seconds"],
+            metainfo["satellite_record_limit"],
+        )
+        return
+
+    database.set_metainfo(
+        None,
+        valid_duration_seconds=config.daemon.data_valid_duration_seconds,
+        satellite_record_limit=config.daemon.satellite_record_limit,
+    )
+    logger.info(
+        "database metainfo initialized: valid_duration=%ss satellite_record_limit=%s",
+        config.daemon.data_valid_duration_seconds,
+        config.daemon.satellite_record_limit,
+    )
+
+
+def _create_data_daemon(
+    config: AppConfig,
+    database: DatabaseManager,
+) -> DashboardDaemon:
+    return DashboardDaemon(
+        config,
+        database,
+        web_server_starter=lambda: logger.info("web server is managed by uvicorn"),
+        frontend_server_starter=lambda: logger.info(
+            "frontend is served by backend from dist_dir=%s",
+            config.frontend.dist_dir,
+        ),
+        data_updater=lambda: update_satellite_database(
+            database,
+            now=datetime.now(timezone.utc),
+        ),
+    )
+
+
 def _cached(
     app: FastAPI,
     key: str,
@@ -174,7 +255,9 @@ def _mount_frontend(app: FastAPI, config: AppConfig) -> None:
     dist_dir = _resolve_frontend_dist_dir(config.frontend.dist_dir)
     index_file = dist_dir / "index.html"
     if not index_file.exists():
+        logger.warning("frontend dist not found: %s", dist_dir)
         return
+    logger.info("frontend mounted: dist_dir=%s", dist_dir)
 
     @app.get("/", include_in_schema=False)
     def frontend_index() -> FileResponse:

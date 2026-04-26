@@ -38,6 +38,11 @@ def list_groups(database: DatabaseManager) -> list[Row]:
     return [_public_group(row) for row in database.get_satellite_groups()]
 
 
+def list_launches(database: DatabaseManager) -> list[Row]:
+    """返回全部发射记录。"""
+    return _launches(database.get_satellite_groups())
+
+
 def get_group_detail(database: DatabaseManager, intl_designator: str) -> Row | None:
     """返回单组详情。"""
     detail = database.get_satellite_group_detail(intl_designator)
@@ -176,6 +181,10 @@ def _recent_satellites(satellites: list[Row], *, limit: int) -> list[Row]:
 
 
 def _recent_launches(groups: list[Row], *, limit: int) -> list[Row]:
+    return _launches(groups, limit=limit)
+
+
+def _launches(groups: list[Row], *, limit: int | None = None) -> list[Row]:
     ordered = sorted(
         groups,
         key=lambda row: (
@@ -184,7 +193,8 @@ def _recent_launches(groups: list[Row], *, limit: int) -> list[Row]:
         ),
         reverse=True,
     )
-    return [_public_launch(row) for row in ordered[:limit]]
+    selected = ordered[:limit] if limit is not None else ordered
+    return [_public_launch(row) for row in selected]
 
 
 def _statistics_rows(rows: list[Row], *, primary_sort_key: str) -> list[Row]:

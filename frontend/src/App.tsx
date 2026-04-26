@@ -244,15 +244,26 @@ function OrbitExplorerPage() {
 
 function LaunchStatsPage() {
   const { data, loading, error } = useApi<DashboardData>('/api/dashboard')
+  const {
+    data: launches,
+    loading: launchesLoading,
+    error: launchesError,
+  } = useApi<LaunchPreview[]>('/api/launches')
 
-  if (loading) return <LoadingState label="发射统计同步中" />
-  if (error) return <ErrorState message={error} />
-  if (!data) return <EmptyState label="暂无发射统计" />
+  if (loading || launchesLoading) return <LoadingState label="发射统计同步中" />
+  if (error || launchesError) {
+    return <ErrorState message={error ?? launchesError ?? ''} />
+  }
+  if (!data || !launches) return <EmptyState label="暂无发射统计" />
 
   return (
     <div className="page-stack">
-      <Panel title="最近 8 次发射" icon={Rocket}>
-        <LaunchTable launches={data.recent_launches} />
+      <Panel
+        title="所有发射"
+        icon={Rocket}
+        meta={`${formatNumber(launches.length)} 次`}
+      >
+        <LaunchTable launches={launches} />
       </Panel>
       <div className="dashboard-grid">
         <Panel className="span-6" title="制造商" icon={Factory}>

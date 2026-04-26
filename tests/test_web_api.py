@@ -104,6 +104,34 @@ def test_dashboard_api_returns_overview(client):
     assert payload["rockets"][0]["serial_number"] is None
 
 
+def test_launches_api_returns_all_launches_newest_first():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    for index in range(9):
+        db.create_satellite_group(
+            name=f"低轨{index + 1:02d}组",
+            intl_designator=f"2026-{index + 1:03d}",
+            launch_time=datetime(2026, 1, index + 1, 10, 0),
+            satellite_count=index + 1,
+        )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+    )
+    launches_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    launches_response = launches_client.get("/api/launches")
+    dashboard_response = launches_client.get("/api/dashboard")
+
+    assert launches_response.status_code == 200
+    launches = launches_response.json()
+    assert len(launches) == 9
+    assert launches[0]["intl_designator"] == "2026-009"
+    assert launches[-1]["intl_designator"] == "2026-001"
+    assert len(dashboard_response.json()["recent_launches"]) == 8
+
+
 def test_dashboard_api_aggregates_rocket_statistics_by_model():
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()

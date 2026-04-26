@@ -566,7 +566,7 @@ function OverviewPointMap({ payload }: { payload: MapPointsPayload | null }) {
         fillOpacity: 0.95,
       }).addTo(overlayLayer)
       marker.bindTooltip(
-        `${satellite.group_name ?? satellite.group_intl_designator ?? '-'}<br>${mapTooltipIdentifier(satellite)}<br>${formatKm(satellite.orbit.perigee_km)} × ${formatKm(satellite.orbit.apogee_km)}`,
+        `${satellite.group_name ?? '-'}<br>${satellite.intl_designator}`,
         { direction: 'top', offset: [0, -7] },
       )
     })

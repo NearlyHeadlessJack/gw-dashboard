@@ -1171,6 +1171,33 @@ tbody tr:hover td {
   font-size: 12px;
 }
 
+.map-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.map-toggle:hover {
+  color: var(--accent);
+  border-color: rgba(52, 211, 235, 0.35);
+}
+
 .icon-button {
   width: 34px;
   height: 34px;
@@ -1360,6 +1387,11 @@ tbody tr:hover td {
   .map-hud {
     right: 12px;
     left: 12px;
+  }
+
+  .map-toggle {
+    flex: 1;
+    justify-content: center;
   }
 
   .hud-meta {

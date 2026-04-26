@@ -516,16 +516,13 @@ function ServerStatusPage() {
     '/api/server/status',
     refreshKey,
   )
-  const [validDurationInput, setValidDurationInput] = useState('')
+  const [validDurationDraft, setValidDurationDraft] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (data) {
-      setValidDurationInput(formatDurationHoursInput(data.valid_duration_seconds))
-    }
-  }, [data])
+  const validDurationInput =
+    validDurationDraft ??
+    (data ? formatDurationHoursInput(data.valid_duration_seconds) : '')
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -552,7 +549,7 @@ function ServerStatusPage() {
           valid_duration_seconds: validDurationSeconds,
         }),
       })
-      setValidDurationInput(formatDurationHoursInput(updated.valid_duration_seconds))
+      setValidDurationDraft(formatDurationHoursInput(updated.valid_duration_seconds))
       setSaveMessage('已保存')
       setRefreshKey((value) => value + 1)
     } catch (error) {
@@ -589,7 +586,7 @@ function ServerStatusPage() {
                 max={SERVER_VALID_DURATION_MAX_HOURS}
                 step="1"
                 value={validDurationInput}
-                onChange={(event) => setValidDurationInput(event.target.value)}
+                onChange={(event) => setValidDurationDraft(event.target.value)}
               />
             </label>
             <div className="settings-actions">
@@ -609,6 +606,7 @@ function ServerStatusPage() {
 function MapPage() {
   const now = useClock()
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showCoverage, setShowCoverage] = useState(false)
   const { data, loading, error } = useApi<MapPointsPayload>(
     '/api/map/satellites',
     refreshKey,
@@ -621,7 +619,7 @@ function MapPage() {
 
   return (
     <div className="map-page">
-      <SatelliteMap payload={data} now={now} />
+      <SatelliteMap payload={data} now={now} showCoverage={showCoverage} />
       <div className="map-hud">
         <div className="map-hud-main">
           <span className="hud-label">SATELLITES</span>
@@ -631,6 +629,14 @@ function MapPage() {
           <Clock size={14} />
           <span>{formatTime(now.toISOString())}</span>
         </div>
+        <label className="map-toggle">
+          <input
+            type="checkbox"
+            checked={showCoverage}
+            onChange={(event) => setShowCoverage(event.target.checked)}
+          />
+          <span>覆盖范围</span>
+        </label>
         <button
           className="icon-button"
           type="button"
@@ -649,12 +655,15 @@ function MapPage() {
 function SatelliteMap({
   payload,
   now,
+  showCoverage,
 }: {
   payload: MapPointsPayload | null
   now: Date
+  showCoverage: boolean
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const coverageLayerRef = useRef<L.LayerGroup | null>(null)
   const trackLayerRef = useRef<L.LayerGroup | null>(null)
   const markerLayerRef = useRef<L.LayerGroup | null>(null)
   const markersRef = useRef<globalThis.Map<string, L.CircleMarker>>(
@@ -728,11 +737,13 @@ function SatelliteMap({
       .on('load', () => setMapError(null))
       .addTo(map)
 
+    const coverageLayer = L.layerGroup().addTo(map)
     const trackLayer = L.layerGroup().addTo(map)
     const markerLayer = L.layerGroup().addTo(map)
     const markerStore = markersRef.current
     const satelliteStore = satelliteByKeyRef.current
     mapRef.current = map
+    coverageLayerRef.current = coverageLayer
     trackLayerRef.current = trackLayer
     markerLayerRef.current = markerLayer
 
@@ -742,6 +753,7 @@ function SatelliteMap({
       markerStore.clear()
       satelliteStore.clear()
       mapRef.current = null
+      coverageLayerRef.current = null
       trackLayerRef.current = null
       markerLayerRef.current = null
     }
@@ -775,6 +787,34 @@ function SatelliteMap({
       })
     })
   }, [activeGroupKey, payload, trackMinute])
+
+  useEffect(() => {
+    const coverageLayer = coverageLayerRef.current
+    if (!coverageLayer) return
+
+    coverageLayer.clearLayers()
+    if (!payload || !showCoverage) return
+
+    payload.satellites.forEach((satellite, index) => {
+      if (!isCoverageSatellite(satellite)) return
+
+      const position = propagateTlePosition(satellite.raw_tle, now)
+      if (!position) return
+
+      const coverageBoundary = generateCoverageBoundary(position)
+      if (coverageBoundary.length <= 2) return
+
+      const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
+      L.polygon(coverageBoundary, {
+        color,
+        opacity: 0.28,
+        weight: 1,
+        fillColor: color,
+        fillOpacity: 0.09,
+        interactive: false,
+      }).addTo(coverageLayer)
+    })
+  }, [now, payload, showCoverage])
 
   useEffect(() => {
     const map = mapRef.current
@@ -2415,6 +2455,10 @@ function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: stri
   return group.orbit_type === 'geo'
     ? `${group.intl_designator} · GEO`
     : group.intl_designator
+}
+
+function isCoverageSatellite(satellite: MapSatellitePoint): boolean {
+  return satellite.orbit_type !== 'geo' && !isHighOrbitSatellite(satellite)
 }
 
 function isHighOrbitSatellite(satellite: MapSatellitePoint): boolean {

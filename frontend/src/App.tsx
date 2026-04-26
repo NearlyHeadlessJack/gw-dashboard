@@ -39,7 +39,7 @@ import type {
   GroupSummary,
   HistoryPoint,
   LaunchPreview,
-  MapSatellitePoint,
+  MapGroupPoint,
   MapPointsPayload,
   MapPayload,
   OrbitSummary,
@@ -196,7 +196,7 @@ function OverviewPage() {
           icon={Map}
           meta={
             mapPoints
-              ? `${formatNumber(mapPoints.satellites.length)} 颗`
+              ? `${formatNumber(mapPoints.groups.length)} 组`
               : undefined
           }
         >
@@ -603,11 +603,11 @@ function OverviewPointMap({
     if (!overlayLayer || !payload) return
 
     overlayLayer.clearLayers()
-    payload.satellites.forEach((satellite) => {
-      const position = propagateTlePosition(satellite.raw_tle, now)
+    payload.groups.forEach((group) => {
+      const position = propagateTlePosition(group.raw_tle, now)
       if (!position) return
 
-      const color = isHighOrbitSatellite(satellite)
+      const color = isHighOrbitPoint(group)
         ? OVERVIEW_MAP_HIGH_ORBIT_COLOR
         : OVERVIEW_MAP_DEFAULT_COLOR
       const marker = L.circleMarker(pointToLatLng(position), {
@@ -618,7 +618,7 @@ function OverviewPointMap({
         fillOpacity: 0.95,
       }).addTo(overlayLayer)
       marker.bindTooltip(
-        `${satellite.group_name ?? '-'}<br>${satellite.intl_designator}`,
+        `${group.name ?? '-'}<br>${group.representative_intl_designator ?? group.intl_designator}`,
         { direction: 'top', offset: [0, -7] },
       )
     })
@@ -1447,13 +1447,13 @@ function mapTooltipIdentifier(group: { intl_designator: string; orbit_type: stri
     : group.intl_designator
 }
 
-function isHighOrbitSatellite(satellite: MapSatellitePoint): boolean {
-  const { perigee_km: perigee, apogee_km: apogee } = satellite.orbit
+function isHighOrbitPoint(point: MapGroupPoint): boolean {
+  const { perigee_km: perigee, apogee_km: apogee } = point.orbit
   return (
-    satellite.orbit_type === 'geo' ||
+    point.orbit_type === 'geo' ||
     (perigee !== null && perigee >= HIGH_ORBIT_ALTITUDE_KM) ||
     (apogee !== null && apogee >= HIGH_ORBIT_ALTITUDE_KM) ||
-    (satellite.group_name?.includes('高轨') ?? false)
+    (point.name?.includes('高轨') ?? false)
   )
 }
 

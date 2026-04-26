@@ -120,26 +120,53 @@ def build_map_points(
     *,
     at: datetime | None = None,
 ) -> Row:
-    """返回总览地图需要的单星 TLE 数据。"""
+    """返回总览地图需要的组级代表 TLE 数据。"""
     moment = _as_utc(at)
-    satellites: list[Row] = []
+    groups: list[Row] = []
     skipped = 0
 
-    for satellite in list_current_satellites(database):
-        raw_tle = satellite.get("raw_tle")
+    for group in database.get_satellite_groups():
+        group_intl_designator = group.get("intl_designator")
+        if not group_intl_designator:
+            skipped += 1
+            continue
+
+        detail = database.get_satellite_group_detail(str(group_intl_designator))
+        if detail is None:
+            skipped += 1
+            continue
+
+        representative = _first_satellite(detail.get("satellites", []))
+        raw_tle = (
+            representative.get("raw_tle")
+            if representative is not None
+            else None
+        ) or detail.get("raw_tle")
         if not raw_tle:
             skipped += 1
             continue
 
-        orbit = _orbit(satellite)
-        satellites.append(
+        orbit_source = representative if representative is not None else detail
+        orbit = _orbit(orbit_source)
+        groups.append(
             {
-                "id": satellite.get("id"),
-                "intl_designator": satellite.get("intl_designator"),
-                "status": satellite.get("status") or "有效",
-                "group_id": satellite.get("group_id"),
-                "group_name": satellite.get("group_name"),
-                "group_intl_designator": satellite.get("group_intl_designator"),
+                "id": detail.get("id"),
+                "name": detail.get("name"),
+                "intl_designator": detail.get("intl_designator"),
+                "representative_intl_designator": (
+                    representative.get("intl_designator")
+                    if representative is not None
+                    else _representative_intl_designator(
+                        str(detail.get("intl_designator") or ""),
+                    )
+                ),
+                "satellite_count": _int(detail.get("satellite_count")),
+                "valid_satellite_count": _int(
+                    detail.get("valid_satellite_count")
+                ),
+                "invalid_satellite_count": _int(
+                    detail.get("invalid_satellite_count")
+                ),
                 "orbit": orbit,
                 "orbit_type": _orbit_type(orbit),
                 "raw_tle": str(raw_tle),
@@ -148,8 +175,8 @@ def build_map_points(
 
     return {
         "generated_at": moment.isoformat().replace("+00:00", "Z"),
-        "satellites": satellites,
-        "skipped_satellites": skipped,
+        "groups": groups,
+        "skipped_groups": skipped,
     }
 
 
@@ -225,6 +252,24 @@ def _launches(groups: list[Row], *, limit: int | None = None) -> list[Row]:
     )
     selected = ordered[:limit] if limit is not None else ordered
     return [_public_launch(row) for row in selected]
+
+
+def _first_satellite(satellites: Any) -> Row | None:
+    if not isinstance(satellites, list):
+        return None
+    candidates = [
+        row
+        for row in satellites
+        if isinstance(row, dict) and row.get("intl_designator")
+    ]
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda row: DatabaseManager._intl_designator_sort_key(
+            str(row.get("intl_designator") or "")
+        ),
+    )
 
 
 def _statistics_rows(rows: list[Row], *, primary_sort_key: str) -> list[Row]:

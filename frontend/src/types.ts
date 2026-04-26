@@ -113,13 +113,14 @@ export type MapGroupTrack = {
   raw_tle: string
 }
 
-export type MapSatellitePoint = {
-  id: number | null
+export type MapGroupPoint = {
+  id: number
+  name: string | null
   intl_designator: string
-  status: string
-  group_id: number | null
-  group_name: string | null
-  group_intl_designator: string | null
+  representative_intl_designator: string | null
+  satellite_count: number
+  valid_satellite_count: number
+  invalid_satellite_count: number
   orbit: OrbitSummary
   orbit_type: 'leo' | 'sso' | 'geo'
   raw_tle: string
@@ -133,6 +134,6 @@ export type MapPayload = {
 
 export type MapPointsPayload = {
   generated_at: string
-  satellites: MapSatellitePoint[]
-  skipped_satellites: number
+  groups: MapGroupPoint[]
+  skipped_groups: number
 }

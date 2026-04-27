@@ -13,7 +13,11 @@ import uvicorn
 
 from gw.config import AppConfig, load_config, parse_startup_args
 from gw.web.app import create_app
-from gw.web.runtime import database_connection_for_log, log_frontend_entry
+from gw.web.runtime import (
+    database_connection_for_log,
+    log_frontend_entry,
+    open_frontend_entry_in_browser,
+)
 
 
 STARTUP_FAILURE = 3
@@ -66,7 +70,7 @@ def run_web_server(config: AppConfig, logger: logging.Logger) -> None:
 
     server = FrontendEntryServer(
         server_config,
-        on_started=lambda: log_frontend_entry(logger, config),
+        on_started=lambda: _announce_frontend_ready(logger, config),
     )
     try:
         server.run()
@@ -75,6 +79,11 @@ def run_web_server(config: AppConfig, logger: logging.Logger) -> None:
 
     if not server.started:
         raise SystemExit(STARTUP_FAILURE)
+
+
+def _announce_frontend_ready(config_logger: logging.Logger, config: AppConfig) -> None:
+    log_frontend_entry(config_logger, config)
+    open_frontend_entry_in_browser(config_logger, config)
 
 
 def build_frontend_static(

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import webbrowser
+from collections.abc import Callable
 
 from gw.config import AppConfig
 
@@ -44,3 +46,24 @@ def log_frontend_entry(logger: logging.Logger, config: AppConfig) -> None:
         frontend_url,
         terminal_hyperlink(frontend_url, "open dashboard"),
     )
+
+
+def open_frontend_entry_in_browser(
+    logger: logging.Logger,
+    config: AppConfig,
+    *,
+    opener: Callable[[str], bool] | None = None,
+) -> None:
+    """尝试用系统默认浏览器打开前端入口。"""
+    frontend_url = frontend_entry_url(config)
+    open_url = opener or (lambda url: webbrowser.open(url, new=2))
+    try:
+        opened = open_url(frontend_url)
+    except Exception as exc:
+        logger.warning("could not open dashboard in browser: %s", exc)
+        return
+
+    if opened:
+        logger.info("dashboard opened in browser: %s", frontend_url)
+    else:
+        logger.warning("could not open dashboard in browser: %s", frontend_url)

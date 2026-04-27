@@ -27,6 +27,40 @@ def test_frontend_entry_url_wraps_ipv6_host():
     assert runtime.frontend_entry_url(config) == "http://[::1]:8123"
 
 
+def test_open_frontend_entry_in_browser_uses_frontend_url(caplog):
+    config = AppConfig(
+        database=DatabaseConfig(connection=":memory:"),
+        backend=BackendConfig(host="0.0.0.0", port=8123),
+    )
+    opened_urls = []
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        runtime.open_frontend_entry_in_browser(
+            logging.getLogger("test"),
+            config,
+            opener=lambda url: opened_urls.append(url) or True,
+        )
+
+    assert opened_urls == ["http://127.0.0.1:8123"]
+    assert "dashboard opened in browser: http://127.0.0.1:8123" in caplog.text
+
+
+def test_open_frontend_entry_in_browser_logs_warning_when_open_fails(caplog):
+    config = AppConfig(
+        database=DatabaseConfig(connection=":memory:"),
+        backend=BackendConfig(host="127.0.0.1", port=8123),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="test"):
+        runtime.open_frontend_entry_in_browser(
+            logging.getLogger("test"),
+            config,
+            opener=lambda url: False,
+        )
+
+    assert "could not open dashboard in browser: http://127.0.0.1:8123" in caplog.text
+
+
 def test_database_connection_for_log_masks_password():
     assert runtime.database_connection_for_log(
         {
@@ -209,6 +243,11 @@ def test_run_web_server_prints_frontend_entry_after_server_starts(monkeypatch):
         "log_frontend_entry",
         lambda logger, loaded_config: events.append(("frontend", loaded_config)),
     )
+    monkeypatch.setattr(
+        web_main,
+        "open_frontend_entry_in_browser",
+        lambda logger, loaded_config: events.append(("browser", loaded_config)),
+    )
 
     web_main.run_web_server(config, logging.getLogger("test"))
 
@@ -226,6 +265,7 @@ def test_run_web_server_prints_frontend_entry_after_server_starts(monkeypatch):
         ),
         "server.started",
         ("frontend", config),
+        ("browser", config),
     ]
 
 

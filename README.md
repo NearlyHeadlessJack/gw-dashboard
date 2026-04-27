@@ -4,9 +4,9 @@
   <img src="docs/assets/logo.svg" width="560" alt="GW Dashboard logo" />
 </p>
 
-[![PyPI Version](https://img.shields.io/pypi/v/gw-dashboard)](https://pypi.org/project/gw-dashboard/)
-[![Python Version](https://img.shields.io/pypi/pyversions/gw-dashboard)](https://pypi.org/project/gw-dashboard/)
-[![License](https://img.shields.io/pypi/l/gw-dashboard)](https://www.gnu.org/licenses/gpl-3.0.en.html)
+[![PyPI Version](https://img.shields.io/pypi/v/gw-dashboard?cacheSeconds=3600)](https://pypi.org/project/gw-dashboard/)
+[![Python Version](https://img.shields.io/pypi/pyversions/gw-dashboard?cacheSeconds=3600)](https://pypi.org/project/gw-dashboard/)
+[![License](https://img.shields.io/pypi/l/gw-dashboard?cacheSeconds=3600)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Publish](https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml/badge.svg?branch=main)](https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml)
 
 **星网（GW）卫星星座数据仪表盘**

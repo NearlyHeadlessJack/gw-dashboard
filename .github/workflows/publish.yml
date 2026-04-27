@@ -8,20 +8,36 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked
       - run: uv run pytest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: uv build
 
   set-version:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -31,7 +47,17 @@ jobs:
         id: version
         run: |
           BASE_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          if [[ -z "${BASE_VERSION}" ]]; then
+            echo "::error::Could not read project version from pyproject.toml."
+            exit 1
+          fi
           if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG_VERSION="${{ github.event.release.tag_name }}"
+            TAG_VERSION="${TAG_VERSION#v}"
+            if [[ "${TAG_VERSION}" != "${BASE_VERSION}" ]]; then
+              echo "::error::Release tag version (${TAG_VERSION}) does not match pyproject.toml version (${BASE_VERSION})."
+              exit 1
+            fi
             echo "version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
           else
             echo "version=${BASE_VERSION}.dev${{ github.run_number }}" >> "$GITHUB_OUTPUT"
@@ -39,34 +65,56 @@ jobs:
 
   publish-testpypi:
     needs: set-version
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
       - name: Set package version
         run: sed -i "s/^version = \".*\"/version = \"${{ needs.set-version.outputs.version }}\"/" pyproject.toml
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
 
   publish-pypi:
     needs: set-version
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
       - name: Set package version
         run: sed -i "s/^version = \".*\"/version = \"${{ needs.set-version.outputs.version }}\"/" pyproject.toml
       - run: uv build

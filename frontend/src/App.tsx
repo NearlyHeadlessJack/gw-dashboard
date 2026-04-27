@@ -1125,9 +1125,7 @@ function OrbitSelectionMap({
 
       const latLng = pointToLatLng(position)
       const color = LEO_TRACK_COLORS[index % LEO_TRACK_COLORS.length]
-      const coverageBoundary = isCoverageSatellite(satellite)
-        ? generateCoverageBoundary(position)
-        : []
+      const coverageBoundary = generateCoverageBoundary(position)
       if (coverageBoundary.length > 2) {
         L.polygon(coverageBoundary, {
           color,

@@ -1,0 +1,73 @@
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run pytest
+
+  set-version:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine version
+        id: version
+        run: |
+          BASE_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${BASE_VERSION}.dev${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish-testpypi:
+    needs: set-version
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set package version
+        run: sed -i "s/^version = \".*\"/version = \"${{ needs.set-version.outputs.version }}\"/" pyproject.toml
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    needs: set-version
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set package version
+        run: sed -i "s/^version = \".*\"/version = \"${{ needs.set-version.outputs.version }}\"/" pyproject.toml
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1

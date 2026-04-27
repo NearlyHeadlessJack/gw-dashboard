@@ -1,5 +1,9 @@
 # GW Dashboard
 
+<p align="center">
+  <img src="docs/assets/logo.svg" width="560" alt="GW Dashboard logo" />
+</p>
+
 **星网（GW）卫星星座数据仪表盘**
 
 基于互联网公开信息，自动化收集星网/国网星座的运行与发射数据，提供可视化仪表盘和交互式地图展示。

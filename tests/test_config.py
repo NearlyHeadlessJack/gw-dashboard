@@ -154,6 +154,7 @@ database:
 
 def test_missing_database_config_uses_default_sqlite(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
     config = load_config([], env={})
 

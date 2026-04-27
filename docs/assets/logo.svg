@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260" role="img" aria-labelledby="title desc">
+  <title id="title">GW Dashboard logo</title>
+  <desc id="desc">A stylized orbital dashboard mark with the GW Dashboard wordmark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="80" y1="28" x2="880" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="0.52" stop-color="#172033"/>
+      <stop offset="1" stop-color="#0b1120"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="112" y1="72" x2="300" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#47d5ff"/>
+      <stop offset="0.56" stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#ff6bd6"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="130" y1="84" x2="244" y2="186" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#54e6ff"/>
+      <stop offset="0.48" stop-color="#8a5cff"/>
+      <stop offset="1" stop-color="#ff66c7"/>
+    </linearGradient>
+    <linearGradient id="word" x1="334" y1="86" x2="760" y2="156" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#c8d7ff"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="24" y="24" width="912" height="212" rx="34" fill="url(#bg)"/>
+  <path d="M63 196C145 139 209 114 308 92C405 70 541 58 893 63" fill="none" stroke="#24314c" stroke-width="1.5"/>
+  <path d="M72 78C164 121 268 150 399 163C544 177 694 163 888 112" fill="none" stroke="#24314c" stroke-width="1.5"/>
+
+  <g transform="translate(72 28)">
+    <ellipse cx="124" cy="102" rx="98" ry="39" fill="none" stroke="url(#orbit)" stroke-width="4" opacity="0.95" transform="rotate(-18 124 102)"/>
+    <ellipse cx="124" cy="102" rx="98" ry="39" fill="none" stroke="#5fe7ff" stroke-width="1.25" opacity="0.45" transform="rotate(24 124 102)"/>
+    <circle cx="124" cy="102" r="57" fill="#101a2e" stroke="#31415f" stroke-width="2"/>
+    <path d="M99 151C82 142 70 124 69 104C68 83 79 64 96 54C88 78 89 125 99 151Z" fill="#20314f"/>
+    <path d="M123 48C154 48 180 72 181 103C182 135 156 159 124 159C115 159 106 157 99 153C123 137 139 118 139 98C139 79 131 62 123 48Z" fill="url(#mark)"/>
+    <path d="M87 116C114 106 139 92 162 74" fill="none" stroke="#d6fbff" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+    <path d="M108 72H153L134 104H166L103 154L120 116H86L108 72Z" fill="#f8fbff" opacity="0.96"/>
+    <circle cx="206" cy="69" r="8" fill="#60eaff" filter="url(#glow)"/>
+    <circle cx="49" cy="139" r="6" fill="#ff75cf" filter="url(#glow)"/>
+    <circle cx="184" cy="152" r="5" fill="#b9a4ff"/>
+    <g transform="translate(205 55) rotate(-18)">
+      <rect x="0" y="11" width="34" height="14" rx="3" fill="#dff8ff"/>
+      <rect x="-19" y="8" width="15" height="20" rx="2" fill="#46d5ff"/>
+      <rect x="38" y="8" width="15" height="20" rx="2" fill="#8b6bff"/>
+      <circle cx="17" cy="18" r="3" fill="#172033"/>
+    </g>
+  </g>
+
+  <g transform="translate(334 83)">
+    <text x="0" y="46" fill="url(#word)" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="800" letter-spacing="0">GW Dashboard</text>
+    <text x="2" y="91" fill="#8da2c9" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="600" letter-spacing="3">SATELLITE CONSTELLATION INTELLIGENCE</text>
+    <g transform="translate(3 126)">
+      <rect x="0" y="0" width="112" height="8" rx="4" fill="#49d7ff"/>
+      <rect x="130" y="0" width="74" height="8" rx="4" fill="#8a5cff"/>
+      <rect x="222" y="0" width="46" height="8" rx="4" fill="#ff6bd6"/>
+      <circle cx="306" cy="4" r="4" fill="#f8fbff"/>
+      <circle cx="330" cy="4" r="4" fill="#8da2c9"/>
+      <circle cx="354" cy="4" r="4" fill="#8da2c9"/>
+    </g>
+  </g>
+</svg>

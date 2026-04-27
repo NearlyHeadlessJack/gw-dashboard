@@ -4,6 +4,13 @@
   <img src="docs/assets/logo.svg" width="560" alt="GW Dashboard logo" />
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/gw-dashboard/"><img src="https://img.shields.io/pypi/v/gw-dashboard" alt="PyPI Version" /></a>
+  <a href="https://pypi.org/project/gw-dashboard/"><img src="https://img.shields.io/pypi/pyversions/gw-dashboard" alt="Python Version" /></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"><img src="https://img.shields.io/pypi/l/gw-dashboard" alt="License" /></a>
+  <a href="https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml"><img src="https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml/badge.svg?branch=main" alt="Publish" /></a>
+</p>
+
 **星网（GW）卫星星座数据仪表盘**
 
 基于互联网公开信息，自动化收集星网/国网星座的运行与发射数据，提供可视化仪表盘和交互式地图展示。
@@ -26,6 +33,7 @@
 | 后端 | Python ≥3.12 · FastAPI · SQLAlchemy · SGP4 |
 | 包管理 | uv (后端) / npm (前端) |
 | 测试 | pytest / ESLint |
+
 
 ## 快速开始
 
@@ -153,7 +161,9 @@ uv build
 
 ## 数据来源
 
-所有数据均来自公开信息（CelesTrak、卫星百科 等），仅供学习参考。
+所有数据均来自公开信息（CelesTrak、卫星百科 等），仅供学习参考。  
+
+> Code with Codex (GPT5.5) & Claude Code (GLM5.1 / DeepSeek-V4-Pro)
 
 ## 许可证
 

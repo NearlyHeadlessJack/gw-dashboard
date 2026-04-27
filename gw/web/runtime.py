@@ -11,7 +11,7 @@ from gw.config import AppConfig
 
 def frontend_entry_url(config: AppConfig) -> str:
     """返回用户浏览器应打开的前端入口 URL。"""
-    host = config.backend.host.strip() or "127.0.0.1"
+    host = config.backend.host.strip() or "0.0.0.0"
     if host in {"0.0.0.0", "::"}:
         host = "127.0.0.1"
     if ":" in host and not host.startswith("["):

@@ -21,7 +21,7 @@ DEFAULT_DATABASE_PATH = "~/.gwtracking/database.db"
 REQUIRED_CONFIG_ITEMS = [
     "database.type: 默认 sqlite3，可选 sqlite3/mysql/pgsql",
     "database.connection: 默认 ~/.gwtracking/database.db；sqlite3 文件路径，或 mysql/pgsql SQLAlchemy URL/dict",
-    "backend.host: 后端 web 服务监听地址，默认 127.0.0.1",
+    "backend.host: 后端 web 服务监听地址，默认 0.0.0.0",
     "backend.port: 后端 web 服务监听端口，默认 8000",
     "backend.reload: 默认 false；当前入口暂不支持 true",
     "backend.cors_origins: 允许访问后端 API 的前端来源列表",
@@ -71,7 +71,7 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class BackendConfig:
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
     cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:5173"])

@@ -75,7 +75,7 @@ def test_loads_sqlite_config_from_environment_only():
 
     assert config.database.type == "sqlite3"
     assert config.database.connection == "database/env.sqlite3"
-    assert config.backend.host == "127.0.0.1"
+    assert config.backend.host == "0.0.0.0"
     assert config.backend.port == 9100
     assert config.backend.cors_origins == [
         "http://localhost:5173",

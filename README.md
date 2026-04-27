@@ -40,6 +40,8 @@ uv sync
 
 > 遇到安装问题？参见 [安装指南](docs/install-guide.md)，涵盖 Windows、Linux（虚拟环境 / pipx / uv）和 macOS 的详细说明。
 
+也可以使用 Docker 部署，镜像托管在 GitHub Container Registry；详细步骤见 [安装指南的 Docker 部署章节](docs/install-guide.md#docker-部署)。
+
 ### 运行
 
 ```bash

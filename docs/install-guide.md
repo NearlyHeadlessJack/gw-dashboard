@@ -225,3 +225,137 @@ sudo dnf install python3-venv
 - 检查 Python 的 `bin` 目录是否在 `PATH` 中
 - 虚拟环境方式：确认已 `source ~/.venvs/gw-dashboard/bin/activate`
 - pipx/uv 方式：确认已执行 `pipx ensurepath` 或重新打开终端
+
+---
+
+## Docker 部署
+
+### 基本使用
+
+官方镜像发布在 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+docker run -p 8000:8000 ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+```
+
+启动后访问 `http://localhost:8000` 即可。
+
+### 环境变量
+
+所有配置均可通过 `GW_` 前缀的环境变量覆盖：
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `GW_BACKEND_HOST` | 监听地址 | `0.0.0.0` |
+| `GW_BACKEND_PORT` | 监听端口 | `8000` |
+| `GW_BACKEND_CORS_ORIGINS` | 允许的跨域来源（逗号分隔） | `http://localhost:5173` |
+| `GW_BACKEND_CACHE_TTL_SECONDS` | API 缓存时间（秒） | `30` |
+| `GW_DAEMON_UPDATE_CHECK_INTERVAL_SECONDS` | 数据更新检查间隔（秒） | `3600` |
+| `GW_DAEMON_DATA_VALID_DURATION_SECONDS` | 数据有效时长（秒） | `86400` |
+| `GW_DAEMON_SATELLITE_RECORD_LIMIT` | 单星历史记录上限 | `1000` |
+| `GW_SCRAPER_NETWORK_TIMEOUT_SECONDS` | 爬虫网络超时（秒） | `30` |
+
+### 数据库配置
+
+#### SQLite（默认）
+
+```bash
+docker run -p 8000:8000 \
+  -v gw-data:/root/.gwtracking \
+  ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+```
+
+```bash
+# 自定义路径
+docker run -p 8000:8000 \
+  -e GW_DATABASE_TYPE=sqlite3 \
+  -e GW_DATABASE_PATH=/data/gw.sqlite3 \
+  -v gw-data:/data \
+  ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+```
+
+#### MySQL
+
+```bash
+docker run -p 8000:8000 \
+  -e GW_DATABASE_TYPE=mysql \
+  -e GW_DATABASE_CONNECTION='mysql+pymysql://root:password@db:3306/gw_dashboard' \
+  ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+```
+
+#### PostgreSQL
+
+```bash
+docker run -p 8000:8000 \
+  -e GW_DATABASE_TYPE=pgsql \
+  -e GW_DATABASE_CONNECTION='postgresql+psycopg://postgres:password@db:5432/gw_dashboard' \
+  ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+```
+
+也可以拆开传连接参数（MySQL 和 PostgreSQL 通用）：
+
+```bash
+docker run -p 8000:8000 \
+  -e GW_DATABASE_TYPE=mysql \
+  -e GW_DATABASE_HOST=db \
+  -e GW_DATABASE_PORT=3306 \
+  -e GW_DATABASE_USER=root \
+  -e GW_DATABASE_PASSWORD=secret \
+  -e GW_DATABASE_NAME=gw_dashboard \
+  ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+```
+
+### Docker Compose 示例
+
+#### MySQL
+
+```yaml
+services:
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: gw_dashboard
+    volumes:
+      - db_data:/var/lib/mysql
+
+  app:
+    image: ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+    ports:
+      - "8000:8000"
+    environment:
+      GW_DATABASE_TYPE: mysql
+      GW_DATABASE_CONNECTION: 'mysql+pymysql://root:secret@db:3306/gw_dashboard'
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+```
+
+#### PostgreSQL
+
+```yaml
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: gw_dashboard
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  app:
+    image: ghcr.io/nearlyheadlessjack/gw-dashboard:latest
+    ports:
+      - "8000:8000"
+    environment:
+      GW_DATABASE_TYPE: pgsql
+      GW_DATABASE_CONNECTION: 'postgresql+psycopg://postgres:secret@db:5432/gw_dashboard'
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+```

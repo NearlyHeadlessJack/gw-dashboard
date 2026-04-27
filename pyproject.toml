@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gw-dashboard"
-version = "0.1.1"
+version = "0.1.2"
 description = "星网（GW）卫星星座数据仪表盘"
 readme = "README.md"
 license = "GPL-3.0-or-later"

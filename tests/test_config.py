@@ -59,7 +59,22 @@ def test_parse_startup_args_accepts_frontend_build_flag():
     args = parse_startup_args(["-d", "-c", "config.yaml"])
 
     assert args.build_frontend is True
+    assert args.readonly is False
     assert args.config_file == "config.yaml"
+
+
+def test_parse_startup_args_accepts_readonly_flag():
+    args = parse_startup_args(["-r"])
+
+    assert args.readonly is True
+    assert args.build_frontend is False
+
+
+def test_load_config_sets_readonly_from_startup_flag():
+    config = load_config(["-r"], env={})
+
+    assert config.readonly is True
+    assert config.build_frontend is False
 
 
 def test_loads_sqlite_config_from_environment_only():

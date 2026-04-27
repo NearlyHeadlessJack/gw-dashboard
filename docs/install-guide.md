@@ -241,6 +241,12 @@ docker run -p 8000:8000 ghcr.io/nearlyheadlessjack/gw-dashboard:latest
 
 启动后访问 `http://localhost:8000` 即可。
 
+如果需要只读模式（禁止通过页面或 API 修改数据有效期），在镜像名后追加 `-r`：
+
+```bash
+docker run -p 8000:8000 ghcr.io/nearlyheadlessjack/gw-dashboard:latest -r
+```
+
 ### 环境变量
 
 所有配置均可通过 `GW_` 前缀的环境变量覆盖：

@@ -256,7 +256,35 @@ def test_server_status_api_rejects_invalid_valid_duration(valid_duration_seconds
     assert response.json()["detail"] == "数据有效期必须在 1 到 48 小时之间"
 
 
-def test_server_status_api_readonly_when_build_frontend():
+def test_server_status_api_readonly_when_readonly_flag():
+    db = DatabaseManager("sqlite3", ":memory:")
+    db.initialize_database()
+    db.set_metainfo(
+        datetime(2026, 4, 26, 8, 0, tzinfo=timezone.utc),
+        valid_duration_seconds=3600,
+        satellite_record_limit=100,
+    )
+    config = AppConfig(
+        database=DatabaseConfig(type="sqlite3", connection=":memory:"),
+        backend=BackendConfig(cache_ttl_seconds=0),
+        frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
+        readonly=True,
+    )
+    readonly_client = TestClient(create_app(config, database=db, start_daemon=False))
+
+    get_response = readonly_client.get("/api/server/status")
+    assert get_response.status_code == 200
+    assert get_response.json()["readonly"] is True
+
+    put_response = readonly_client.put(
+        "/api/server/status",
+        json={"valid_duration_seconds": 7200},
+    )
+    assert put_response.status_code == 403
+    assert put_response.json()["detail"] == "只读模式下禁止修改数据有效期"
+
+
+def test_server_status_api_build_frontend_does_not_enable_readonly():
     db = DatabaseManager("sqlite3", ":memory:")
     db.initialize_database()
     db.set_metainfo(
@@ -270,18 +298,18 @@ def test_server_status_api_readonly_when_build_frontend():
         frontend=FrontendConfig(dist_dir="/tmp/gw-dashboard-missing-dist"),
         build_frontend=True,
     )
-    readonly_client = TestClient(create_app(config, database=db, start_daemon=False))
+    build_client = TestClient(create_app(config, database=db, start_daemon=False))
 
-    get_response = readonly_client.get("/api/server/status")
+    get_response = build_client.get("/api/server/status")
     assert get_response.status_code == 200
-    assert get_response.json()["readonly"] is True
+    assert get_response.json()["readonly"] is False
 
-    put_response = readonly_client.put(
+    put_response = build_client.put(
         "/api/server/status",
         json={"valid_duration_seconds": 7200},
     )
-    assert put_response.status_code == 403
-    assert put_response.json()["detail"] == "开发模式下禁止修改数据有效期"
+    assert put_response.status_code == 200
+    assert put_response.json()["valid_duration_seconds"] == 7200
 
 
 def test_server_status_api_not_readonly_by_default():

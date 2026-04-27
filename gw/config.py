@@ -168,9 +168,16 @@ class AppConfig:
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
     build_frontend: bool = False
+    readonly: bool = False
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any], *, build_frontend: bool = False) -> "AppConfig":
+    def from_mapping(
+        cls,
+        data: Mapping[str, Any],
+        *,
+        build_frontend: bool = False,
+        readonly: bool = False,
+    ) -> "AppConfig":
         database_data = _section(data, "database")
         return cls(
             database=DatabaseConfig.from_mapping(database_data),
@@ -179,6 +186,7 @@ class AppConfig:
             daemon=DaemonConfig.from_mapping(_section(data, "daemon")),
             scraper=ScraperConfig.from_mapping(_section(data, "scraper")),
             build_frontend=build_frontend,
+            readonly=readonly,
         )
 
 
@@ -197,6 +205,12 @@ def parse_startup_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="启动前重新编译 frontend 前端静态资源（需要 Node.js/npm 和源码目录）",
     )
+    parser.add_argument(
+        "-r",
+        "--readonly",
+        action="store_true",
+        help="只读模式：禁止通过 Web 页面或 API 修改数据有效期",
+    )
     return parser.parse_args(argv)
 
 
@@ -213,7 +227,11 @@ def load_config(
 
     env_data = config_from_env(os.environ if env is None else env)
     merged = _deep_merge(config_data, env_data)
-    return AppConfig.from_mapping(merged, build_frontend=args.build_frontend)
+    return AppConfig.from_mapping(
+        merged,
+        build_frontend=args.build_frontend,
+        readonly=args.readonly,
+    )
 
 
 def load_yaml_config(path: str | Path) -> ConfigMapping:

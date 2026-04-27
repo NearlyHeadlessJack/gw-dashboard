@@ -83,6 +83,7 @@ export type ServerStatusData = {
   valid_duration_seconds: number
   expires_at: string | null
   expired: boolean
+  readonly: boolean
 }
 
 export type GroupSummary = {

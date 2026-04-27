@@ -25,15 +25,6 @@
 - **自动更新** — 后台守护进程定期爬取最新 TLE 数据，无需手动干预
 - **多数据库支持** — SQLite / MySQL / PostgreSQL 三种后端可选
 
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| 前端 | React 19 · TypeScript · Vite 8 · Leaflet · satellite.js |
-| 后端 | Python ≥3.12 · FastAPI · SQLAlchemy · SGP4 |
-| 包管理 | uv (后端) / npm (前端) |
-| 测试 | pytest / ESLint |
-
 
 ## 快速开始
 
@@ -48,6 +39,8 @@ git clone https://github.com/NearlyHeadlessJack/gw-dashboard.git
 cd gw-dashboard
 uv sync
 ```
+
+> 遇到安装问题？参见 [安装指南](docs/install-guide.md)，涵盖 Windows、Linux（虚拟环境 / pipx / uv）和 macOS 的详细说明。
 
 ### 运行
 
@@ -115,6 +108,15 @@ gw-dashboard/
 ├── database/            # 数据库存储目录
 └── pyproject.toml       # 项目配置
 ```
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 前端 | React 19 · TypeScript · Vite 8 · Leaflet · satellite.js |
+| 后端 | Python ≥3.12 · FastAPI · SQLAlchemy · SGP4 |
+| 包管理 | uv (后端) / npm (前端) |
+| 测试 | pytest / ESLint |
 
 ## 开发
 

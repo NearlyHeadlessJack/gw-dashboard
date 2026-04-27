@@ -597,12 +597,14 @@ function ServerStatusPage() {
                 step="1"
                 value={validDurationInput}
                 onChange={(event) => setValidDurationDraft(event.target.value)}
+                disabled={data.readonly}
               />
             </label>
             <div className="settings-actions">
-              <button className="primary-button" type="submit" disabled={saving}>
+              <button className="primary-button" type="submit" disabled={saving || data.readonly}>
                 {saving ? '保存中' : '保存'}
               </button>
+              {data.readonly && <span className="settings-error">开发模式下禁止修改有效期</span>}
               {saveMessage && <span className="settings-message">{saveMessage}</span>}
               {saveError && <span className="settings-error">{saveError}</span>}
             </div>

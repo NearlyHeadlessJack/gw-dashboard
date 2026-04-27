@@ -167,9 +167,10 @@ class AppConfig:
     frontend: FrontendConfig = field(default_factory=FrontendConfig)
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
+    build_frontend: bool = False
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "AppConfig":
+    def from_mapping(cls, data: Mapping[str, Any], *, build_frontend: bool = False) -> "AppConfig":
         database_data = _section(data, "database")
         return cls(
             database=DatabaseConfig.from_mapping(database_data),
@@ -177,6 +178,7 @@ class AppConfig:
             frontend=FrontendConfig.from_mapping(_section(data, "frontend")),
             daemon=DaemonConfig.from_mapping(_section(data, "daemon")),
             scraper=ScraperConfig.from_mapping(_section(data, "scraper")),
+            build_frontend=build_frontend,
         )
 
 
@@ -211,7 +213,7 @@ def load_config(
 
     env_data = config_from_env(os.environ if env is None else env)
     merged = _deep_merge(config_data, env_data)
-    return AppConfig.from_mapping(merged)
+    return AppConfig.from_mapping(merged, build_frontend=args.build_frontend)
 
 
 def load_yaml_config(path: str | Path) -> ConfigMapping:

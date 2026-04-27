@@ -138,6 +138,7 @@ def create_app(
     app.state.database = db
     app.state.cache = cache
     app.state.time_service = ntp_time_service
+    app.state.build_frontend = app_config.build_frontend
 
     app.add_middleware(
         CORSMiddleware,
@@ -164,10 +165,15 @@ def create_app(
 
     @app.get("/api/server/status")
     def server_status() -> Any:
-        return _handle_database_errors(lambda: get_server_status(db))
+        result = _handle_database_errors(lambda: get_server_status(db))
+        result["readonly"] = app.state.build_frontend
+        return result
 
     @app.put("/api/server/status")
     def update_server_status_endpoint(payload: dict[str, Any]) -> Any:
+        if app.state.build_frontend:
+            raise HTTPException(status_code=403, detail="开发模式下禁止修改数据有效期")
+
         raw_value = payload.get("valid_duration_seconds")
         try:
             valid_duration_seconds = int(raw_value)

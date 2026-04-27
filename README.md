@@ -1,19 +1,21 @@
+<div align="center">
+
 # GW Dashboard
 
-<p align="center">
   <img src="docs/assets/logo.svg" width="560" alt="GW Dashboard logo" />
-</p>
 
-[![PyPI Version](https://img.shields.io/pypi/v/gw-dashboard?cacheSeconds=3600)](https://pypi.org/project/gw-dashboard/)
-[![Python Version](https://img.shields.io/pypi/pyversions/gw-dashboard?cacheSeconds=3600)](https://pypi.org/project/gw-dashboard/)
-[![License](https://img.shields.io/pypi/l/gw-dashboard?cacheSeconds=3600)](https://www.gnu.org/licenses/gpl-3.0.en.html)
-[![Publish](https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml/badge.svg?branch=main)](https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml)
+  [![PyPI Version](https://img.shields.io/pypi/v/gw-dashboard?cacheSeconds=3600)](https://pypi.org/project/gw-dashboard/)
+  [![Python Version](https://img.shields.io/pypi/pyversions/gw-dashboard?cacheSeconds=3600)](https://pypi.org/project/gw-dashboard/)
+  [![License](https://img.shields.io/pypi/l/gw-dashboard?cacheSeconds=3600)](https://www.gnu.org/licenses/gpl-3.0.en.html)
+  [![Publish](https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml/badge.svg?branch=main)](https://github.com/NearlyHeadlessJack/gw-dashboard/actions/workflows/publish.yml)
 
 **星网（GW）卫星星座数据仪表盘**
 
 基于互联网公开信息，自动化收集星网/国网星座的运行与发射数据，提供可视化仪表盘和交互式地图展示。
 
 <img src="docs/assets/example.gif" width="600" alt="GW Dashboard 示例" />
+
+</div>
 
 ## 功能特性
 

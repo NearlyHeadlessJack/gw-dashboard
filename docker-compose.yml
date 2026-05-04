@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "9997:9997"
+    environment:
+      GW_BACKEND_PORT: "9997"
+    volumes:
+      - gw-data:/root/.gwtracking
+
+volumes:
+  gw-data:
